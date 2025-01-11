@@ -221,10 +221,14 @@ def create_ccnc(packer, CAN, frame, CP, CC, CS):
     })
 
     # LEAD
-    msg_162.update({
-      "LEAD": 2 if enabled and hud.leadVisible else 1 if hud.leadVisible else 0,
-      "LEAD_DISTANCE": 150,
-    })
+    sm.update()
+    if sm.updated['radarState']:
+      lead_one = sm['radarState'].leadOne
+      if lead_one.dRel != 0:
+        msg_162["LEAD_DISTANCE"] = max(0, min(int(lead_one.dRel * 3.28084 * 3), 1000))
+        msg_162["LEAD_LATERAL"] = - max(-45, min(int(lead_one.yRel * 1), 45))
+        # msg_162["LEAD"] = 2 if enabled and hud.leadVisible else 1 if hud.leadVisible else 0
+        msg_162["LEAD"] = 2 if hud.leadVisible else 0
 
   ret.append(packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, lfahda_cluster))
   ret.append(packer.make_can_msg("MSG_161", CAN.ECAN, msg_161))
