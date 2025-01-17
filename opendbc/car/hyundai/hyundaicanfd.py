@@ -1,7 +1,8 @@
+import numpy as np
 from opendbc.car import CanBusBase
-from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.common.numpy_fast import clip
 from opendbc.car.hyundai.values import HyundaiFlags
+
+from opendbc.car.common.conversions import Conversions as CV
 import cereal.messaging as messaging
 
 sm = messaging.SubMaster(['radarState'], ignore_avg_freq=['radarState'])
