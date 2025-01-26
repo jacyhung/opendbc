@@ -2,6 +2,10 @@ import numpy as np
 from opendbc.car import CanBusBase
 from opendbc.car.hyundai.values import HyundaiFlags
 
+from opendbc.car.common.conversions import Conversions as CV
+import cereal.messaging as messaging
+
+sm = messaging.SubMaster(['radarState'], ignore_avg_freq=['radarState'])
 
 class CanBus(CanBusBase):
   def __init__(self, CP, fingerprint=None, hda2=None) -> None:
@@ -38,17 +42,26 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer):
 
   ret = []
 
-  values = {
-    "LKA_MODE": 2,
-    "LKA_ICON": 2 if enabled else 1,
-    "TORQUE_REQUEST": apply_steer,
-    "LKA_ASSIST": 0,
-    "STEER_REQ": 1 if lat_active else 0,
-    "STEER_MODE": 0,
-    "HAS_LANE_SAFETY": 0,  # hide LKAS settings
-    "NEW_SIGNAL_1": 0,
-    "NEW_SIGNAL_2": 0,
-  }
+  if CP.flags & HyundaiFlags.CCNC:
+    values = {
+      "NEW_SIGNAL_1": 3 if lat_active else 1,
+      "TORQUE_REQUEST": apply_steer,
+      "STEER_REQ": 1 if lat_active else 0,
+      "NEW_SIGNAL_4": 9,
+      "NEW_SIGNAL_3": 10 if lat_active else 100, # TODO: value between 10-32+ sometimes
+    }
+  else:
+    values = {
+      "LKA_MODE": 2,
+      "LKA_ICON": 2 if enabled else 1,
+      "TORQUE_REQUEST": apply_steer,
+      "LKA_ASSIST": 0,
+      "STEER_REQ": 1 if lat_active else 0,
+      "STEER_MODE": 0,
+      "HAS_LANE_SAFETY": 0,  # hide LKAS settings
+      "NEW_SIGNAL_1": 0,
+      "NEW_SIGNAL_2": 0,
+    }
 
   if CP.flags & HyundaiFlags.CANFD_HDA2:
     hda2_lkas_msg = "LKAS_ALT" if CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING else "LKAS"
@@ -119,6 +132,110 @@ def create_lfahda_cluster(packer, CAN, enabled):
   }
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
+def create_ccnc(packer, CAN, frame, CP, CC, CS):
+  ret = []
+
+  msg_161 = CS.msg_161.copy()
+  msg_162 = CS.msg_162.copy()
+  msg_1B5 = CS.msg_1B5.copy()
+  enabled = CC.enabled
+  hud = CC.hudControl
+
+  # HIDE FAULTS
+  for f in ("FAULT_LSS", "FAULT_HDA", "FAULT_DAS"):
+    msg_162[f] = 0
+
+  # HIDE ALERTS
+  if msg_161.get("ALERTS_3") == 17:  # DRIVE_CAREFULLY
+    msg_161["ALERTS_3"] = 0
+
+  if msg_161.get("ALERTS_5") == 2:  # WATCH_FOR_SURROUNDING_VEHICLES
+    msg_161["ALERTS_5"] = 0
+
+  if msg_161.get("ALERTS_5") == 4:  # SMART_CRUISE_CONTROL_CONDITIONS_NOT_MET
+    msg_161["ALERTS_5"] = 0
+
+  if msg_161.get("ALERTS_5") == 5:  # USE_SWITCH_OR_PEDAL_TO_ACCELERATE
+    msg_161["ALERTS_5"] = 0
+
+  if msg_161.get("ALERTS_2") == 5:  # CONSIDER_TAKING_A_BREAK
+    msg_161.update({"ALERTS_2": 0, "SOUNDS_2": 0, "DAW_ICON": 0})
+
+  if msg_161.get("SOUNDS_4") == 2 and msg_161.get("LFA_ICON") in (3, 0,):  # LFA BEEPS
+    msg_161["SOUNDS_4"] = 0
+
+  # ICONS, LANELINES
+  msg_161.update({
+    "CENTERLINE": 1 if enabled else 0,
+    "LANELINE_LEFT": 2 if msg_1B5.get("LEFT") > 0 else 0,
+    "LANELINE_RIGHT": 2 if msg_1B5.get("RIGHT") > 0 else 0,
+    "LFA_ICON": 2 if enabled else 0,
+    "LKA_ICON": 4 if enabled else 4 if msg_1B5.get("LEFT") > 0 else 4 if msg_1B5.get("RIGHT") > 0 else 3,
+    "LCA_LEFT_ICON": 0 if CS.out.leftBlindspot or CS.out.vEgo < 8.94 or not enabled else 2 if CC.leftBlinker else 1,
+    "LCA_RIGHT_ICON": 0 if CS.out.rightBlindspot or CS.out.vEgo < 8.94 or not enabled else 2 if CC.rightBlinker else 1,
+    "LCA_LEFT_ARROW": 2 if CC.leftBlinker else 0,
+    "LCA_RIGHT_ARROW": 2 if CC.rightBlinker else 0,
+    "LANE_LEFT": 1 if enabled and CC.leftBlinker and CS.out.vEgo > 8.94 else 0,
+    "LANE_RIGHT": 1 if enabled and CC.rightBlinker and CS.out.vEgo > 8.94 else 0,
+  })
+
+  # LFAHDA_CLUSTER
+  lfahda_cluster = {
+    "NEW_SIGNAL_5": 1,
+    "LFA_ICON": 2 if enabled else 0,
+  }
+
+  # LEAD 
+  if not enabled:
+    sm.update()
+    if sm.updated['radarState']:
+      lead_one = sm['radarState'].leadOne
+      if lead_one.dRel != 0:
+        msg_162["LEAD_DISTANCE"] = max(0, min(int(lead_one.dRel * 3.28084 * 3), 1000))
+        msg_162["LEAD_LATERAL"] = - max(-45, min(int(lead_one.yRel * 1), 45))
+        # msg_162["LEAD"] = 2 if enabled and hud.leadVisible else 1 if hud.leadVisible else 0
+        msg_162["LEAD"] = 2 if hud.leadVisible else 0
+
+  # LANELINES
+  curvature = {
+    i: (31 if i == -1 else 13 - abs(i + 15)) if i < 0 else 15 + i
+    for i in range(-15, 16)
+  }
+
+  msg_161.update({
+    "LANELINE_CURVATURE": curvature.get(max(-15, min(int(CS.out.steeringAngleDeg / 3), 15)), 14) if enabled else 15,
+  })
+
+  # OP LONG
+  if CP.openpilotLongitudinalControl:
+
+    # SETSPEED, DISTANCE
+    msg_161.update({
+      "SETSPEED": 3 if enabled else 1,
+      "SETSPEED_HUD": 2 if enabled else 1,
+      "SETSPEED_SPEED": 25 if (s := round(CS.out.vCruiseCluster * (1 if CS.is_metric else CV.KPH_TO_MPH))) > 100 else s,
+      "DISTANCE": hud.leadDistanceBars,
+      "DISTANCE_SPACING": 1 if enabled else 0,
+      "DISTANCE_LEAD": 2 if enabled and hud.leadVisible else 1 if enabled else 0,
+      "DISTANCE_CAR": 2 if enabled else 1,
+      "ALERTS_3": hud.leadDistanceBars + 6,
+    })
+
+    # LEAD
+    if enabled:
+      sm.update()
+      if sm.updated['radarState']:
+        lead_one = sm['radarState'].leadOne
+        if lead_one.dRel != 0:
+          msg_162["LEAD_DISTANCE"] = max(0, min(int(lead_one.dRel * 3.28084 * 3), 1000))
+          msg_162["LEAD_LATERAL"] = - max(-45, min(int(lead_one.yRel * 1), 45))
+          msg_162["LEAD"] = 2 if hud.leadVisible else 0
+
+  ret.append(packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, lfahda_cluster))
+  ret.append(packer.make_can_msg("MSG_161", CAN.ECAN, msg_161))
+  ret.append(packer.make_can_msg("MSG_162", CAN.ECAN, msg_162))
+
+  return ret
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control):
   jerk = 5
