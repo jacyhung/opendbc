@@ -167,12 +167,12 @@ def create_ccnc(packer, CAN, frame, CP, CC, CS):
   # ICONS, LANELINES
   msg_161.update({
     "CENTERLINE": 1 if enabled else 0,
-    "LANELINE_LEFT": 2 if msg_1B5.get("LEFT") > 0 else 0,
-    "LANELINE_RIGHT": 2 if msg_1B5.get("RIGHT") > 0 else 0,
+    "LANELINE_LEFT": 6 if (msg_1B5.get("LEFT") > 0 and enabled) else (2 if (msg_1B5.get("LEFT") > 0 and not enabled) else 0),
+    "LANELINE_RIGHT": 6 if (msg_1B5.get("RIGHT") > 0 and enabled) else (2 if (msg_1B5.get("RIGHT") > 0 and not enabled) else 0),
     "LFA_ICON": 2 if enabled else 0,
     "LKA_ICON": 4 if enabled else 4 if msg_1B5.get("LEFT") > 0 else 4 if msg_1B5.get("RIGHT") > 0 else 3,
-    "LCA_LEFT_ICON": 0 if CS.out.leftBlindspot or CS.out.vEgo < 8.94 or not enabled else 2 if CC.leftBlinker else 1,
-    "LCA_RIGHT_ICON": 0 if CS.out.rightBlindspot or CS.out.vEgo < 8.94 or not enabled else 2 if CC.rightBlinker else 1,
+    "LCA_LEFT_ICON": 0 if CS.out.vEgo < 8.94 or not enabled else 2 if CC.leftBlinker else 1,
+    "LCA_RIGHT_ICON": 0 if CS.out.vEgo < 8.94 or not enabled else 2 if CC.rightBlinker else 1,
     "LCA_LEFT_ARROW": 2 if CC.leftBlinker else 0,
     "LCA_RIGHT_ARROW": 2 if CC.rightBlinker else 0,
     "LANE_LEFT": 1 if enabled and CC.leftBlinker and CS.out.vEgo > 8.94 else 0,
