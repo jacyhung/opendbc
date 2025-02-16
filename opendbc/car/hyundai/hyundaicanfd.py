@@ -1,8 +1,10 @@
 import numpy as np
+import cereal.messaging as messaging
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai.values import HyundaiFlags
 
+sm = messaging.SubMaster(['radarState'], ignore_avg_freq=['radarState'])
 
 class CanBus(CanBusBase):
   def __init__(self, CP, fingerprint=None, hda2=None) -> None:
@@ -134,6 +136,7 @@ def create_ccnc(packer, CAN, frame, CP, CC, CS):
 
   msg_161 = CS.msg_161.copy()
   msg_162 = CS.msg_162.copy()
+  msg_1B5 = CS.msg_1B5.copy()
   enabled = CC.enabled
   hud = CC.hudControl
 
@@ -163,10 +166,16 @@ def create_ccnc(packer, CAN, frame, CP, CC, CS):
   # ICONS, LANELINES
   msg_161.update({
     "CENTERLINE": 1 if enabled else 0,
-    "LANELINE_LEFT": 2 if enabled else 0,
-    "LANELINE_RIGHT": 2 if enabled else 0,
+    "LANELINE_LEFT": 2 if msg_1B5.get("LEFT") > 0 else 0,
+    "LANELINE_RIGHT": 2 if msg_1B5.get("RIGHT") > 0 else 0,
     "LFA_ICON": 2 if enabled else 0,
-    "LKA_ICON": 0,
+    "LKA_ICON": 4 if enabled else 4 if msg_1B5.get("LEFT") > 0 else 4 if msg_1B5.get("RIGHT") > 0 else 3,
+    "LCA_LEFT_ICON": 0 if CS.out.leftBlindspot or CS.out.vEgo < 8.94 or not enabled else 2 if CC.leftBlinker else 1,
+    "LCA_RIGHT_ICON": 0 if CS.out.rightBlindspot or CS.out.vEgo < 8.94 or not enabled else 2 if CC.rightBlinker else 1,
+    "LCA_LEFT_ARROW": 2 if CC.leftBlinker else 0,
+    "LCA_RIGHT_ARROW": 2 if CC.rightBlinker else 0,
+    "LANE_LEFT": 1 if enabled and CC.leftBlinker and CS.out.vEgo > 8.94 else 0,
+    "LANE_RIGHT": 1 if enabled and CC.rightBlinker and CS.out.vEgo > 8.94 else 0,
   })
 
   # LFAHDA_CLUSTER
@@ -174,6 +183,17 @@ def create_ccnc(packer, CAN, frame, CP, CC, CS):
     "NEW_SIGNAL_5": 1,
     "LFA_ICON": 2 if enabled else 0,
   }
+
+  # LEAD 
+  if not enabled:
+    sm.update()
+    if sm.updated['radarState']:
+      lead_one = sm['radarState'].leadOne
+      if lead_one.dRel != 0:
+        msg_162["LEAD_DISTANCE"] = max(0, min(int(lead_one.dRel * 3.28084 * 3), 1000))
+        msg_162["LEAD_LATERAL"] = - max(-45, min(int(lead_one.yRel * 1), 45))
+        # msg_162["LEAD"] = 2 if enabled and hud.leadVisible else 1 if hud.leadVisible else 0
+        msg_162["LEAD"] = 2 if hud.leadVisible else 0
 
   # OP LONG
   if CP.openpilotLongitudinalControl:
@@ -191,10 +211,14 @@ def create_ccnc(packer, CAN, frame, CP, CC, CS):
     })
 
     # LEAD
-    msg_162.update({
-      "LEAD": 2 if enabled and hud.leadVisible else 1 if hud.leadVisible else 0,
-      "LEAD_DISTANCE": 150,
-    })
+    if enabled:
+      sm.update()
+      if sm.updated['radarState']:
+        lead_one = sm['radarState'].leadOne
+        if lead_one.dRel != 0:
+          msg_162["LEAD_DISTANCE"] = max(0, min(int(lead_one.dRel * 3.28084 * 3), 1000))
+          msg_162["LEAD_LATERAL"] = - max(-45, min(int(lead_one.yRel * 1), 45))
+          msg_162["LEAD"] = 2 if hud.leadVisible else 0
 
   ret.append(packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, lfahda_cluster))
   ret.append(packer.make_can_msg("CCNC_0x161", CAN.ECAN, msg_161))
