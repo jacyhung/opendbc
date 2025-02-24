@@ -58,6 +58,7 @@ class CarState(CarStateBase):
 
     self.msg_161 = {}
     self.msg_162 = {}
+    self.msg_1B5 = {}
 
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0
@@ -242,6 +243,7 @@ class CarState(CarStateBase):
     if self.CP.flags & HyundaiFlags.CCNC and not self.CP.flags & HyundaiFlags.CANFD_LKA_STEERING:
       self.msg_161 = copy.copy(cp_cam.vl["CCNC_0x161"])
       self.msg_162 = copy.copy(cp_cam.vl["CCNC_0x162"])
+      self.msg_1B5 = copy.copy(cp_cam.vl["CCNC_0x1B5"])
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
       self.cruise_info = copy.copy(cp_cruise_info.vl["SCC_CONTROL"])
 
@@ -341,6 +343,7 @@ class CarState(CarStateBase):
       cam_messages += [
         ("CCNC_0x161", 20),
         ("CCNC_0x162", 20),
+        ("CCNC_0x1B5", 20),
       ]
 
     return {

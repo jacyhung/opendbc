@@ -129,6 +129,7 @@ def create_ccnc(packer, CAN, frame, CP, CC, CS):
 
   msg_161 = CS.msg_161.copy()
   msg_162 = CS.msg_162.copy()
+  msg_1B5 = CS.msg_1B5.copy()
   enabled = CC.enabled
   hud = CC.hudControl
 
@@ -159,10 +160,43 @@ def create_ccnc(packer, CAN, frame, CP, CC, CS):
   # ICONS, LANELINES
   msg_161.update({
     "CENTERLINE": 1 if enabled else 0,
-    "LANELINE_LEFT": 2 if enabled else 0,
-    "LANELINE_RIGHT": 2 if enabled else 0,
+    "LANELINE_LEFT": 2 if msg_1B5.get("LEFT") > 0 else 0,
+    "LANELINE_RIGHT": 2 if msg_1B5.get("RIGHT") > 0 else 0,
     "LFA_ICON": 2 if enabled else 0,
-    "LKA_ICON": 0,
+    "LKA_ICON": 4 if enabled else 4 if msg_1B5.get("LEFT") > 0 else 4 if msg_1B5.get("RIGHT") > 0 else 3,
+    "LCA_LEFT_ICON": 0 if CS.out.vEgo < 8.94 or not enabled else 2 if CC.leftBlinker else 1,
+    "LCA_RIGHT_ICON": 0 if CS.out.vEgo < 8.94 or not enabled else 2 if CC.rightBlinker else 1,
+    "LCA_LEFT_ARROW": 2 if CC.leftBlinker else 0,
+    "LCA_RIGHT_ARROW": 2 if CC.rightBlinker else 0,
+    "LANE_LEFT": 1 if enabled and CC.leftBlinker and CS.out.vEgo > 8.94 else 0,
+    "LANE_RIGHT": 1 if enabled and CC.rightBlinker and CS.out.vEgo > 8.94 else 0,
+  })
+
+# LEAD
+  if not enabled:
+    base_distance = msg_1B5.get("LEAD_DISTANCE", 2000)
+
+    if msg_1B5.get("LEAD") > 0:
+        lead_status = 1 if msg_1B5.get("LEAD_3") == 1 else 2
+        distance = max(0, min(base_distance, 2000))
+    else:
+        # No lead detected
+        lead_status = 0
+        distance = 2000
+
+    msg_162.update({
+        "LEAD": lead_status,
+        "LEAD_DISTANCE": distance
+    })
+
+# LANELINES
+  curvature = {
+    i: (31 if i == -1 else 13 - abs(i + 15)) if i < 0 else 15 + i
+    for i in range(-15, 16)
+  }
+
+  msg_161.update({
+    "LANELINE_CURVATURE": curvature.get(max(-15, min(int(CS.out.steeringAngleDeg / 3), 15)), 14) if enabled else 15,
   })
 
   # OP LONG
@@ -182,10 +216,21 @@ def create_ccnc(packer, CAN, frame, CP, CC, CS):
     })
 
     # LEAD
-    msg_162.update({
-      "LEAD": 2 if enabled and hud.leadVisible else 1 if hud.leadVisible else 0,
-      "LEAD_DISTANCE": 10,
-    })
+    if enabled:
+      base_distance = msg_1B5.get("LEAD_DISTANCE", 2000)
+
+      if msg_1B5.get("LEAD") > 0:
+          lead_status = 1 if msg_1B5.get("LEAD_3") == 1 else 2
+          distance = max(0, min(base_distance, 2000))
+      else:
+          # No lead detected
+          lead_status = 0
+          distance = 2000
+
+      msg_162.update({
+          "LEAD": lead_status,
+          "LEAD_DISTANCE": distance
+      })
 
   ret.append(packer.make_can_msg("CCNC_0x161", CAN.ECAN, msg_161))
   ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, msg_162))
