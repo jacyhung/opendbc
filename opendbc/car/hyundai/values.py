@@ -66,6 +66,7 @@ class HyundaiSafetyFlags(IntFlag):
   CANFD_LKA_STEERING_ALT = 128
   FCEV_GAS = 256
   ALT_LIMITS_2 = 512
+  CCNC = 1024
 
 
 class HyundaiFlags(IntFlag):
@@ -164,7 +165,7 @@ class HyundaiCanFDPlatformConfig(PlatformConfig):
   def init(self):
     self.flags |= HyundaiFlags.CANFD
     if self.flags & HyundaiFlags.MANDO_RADAR:
-      self.dbc_dict = {Bus.pt: "hyundai_canfd", Bus.radar: 'hyundai_canfd_radar_generated'}
+      self.dbc_dict = {Bus.pt: "hyundai_canfd_generated", Bus.radar: 'hyundai_canfd_radar_generated'}
 
 
 class CAR(Platforms):
