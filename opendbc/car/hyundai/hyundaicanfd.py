@@ -148,8 +148,16 @@ def create_ccnc(packer, CAN, CP, CC, CS):
     "LKA_ICON": 4 if latActive else 4 if msg_1B5.get("LEFT") > 0 else 4 if msg_1B5.get("RIGHT") > 0 else 3,
     "LFA_ICON": 2 if latActive else 1,
     "CENTERLINE": 1 if latActive else 0,
-    "LANELINE_LEFT": 2 if msg_1B5.get("LEFT") > 0 else 4 if hud.leftLaneDepart else 2 if CS.out.leftBlindspot or CS.out.vEgo < 8.94 else 6,
-    "LANELINE_RIGHT": 2 if msg_1B5.get("RIGHT") > 0 else 4 if hud.rightLaneDepart else 2 if CS.out.rightBlindspot or CS.out.vEgo < 8.94 else 6,
+    "LANELINE_LEFT": (
+        2 if msg_1B5.get("LEFT") > 0 else
+        4 if hud.leftLaneDepart else
+        6 if msg_1B5.get("LEFT") > 0 and not CS.out.leftBlindspot and CS.out.vEgo < 8.94 else 0
+    ),
+    "LANELINE_RIGHT": (
+        2 if msg_1B5.get("RIGHT") > 0 else
+        4 if hud.rightLaneDepart else
+        6 if msg_1B5.get("RIGHT") > 0 and not CS.out.rightBlindspot and CS.out.vEgo < 8.94 else 0
+    ),
     "LCA_LEFT_ICON": 0 if CS.out.vEgo < 8.94 or not enabled else 2 if CC.leftBlinker else 1,
     "LCA_RIGHT_ICON": 0 if CS.out.vEgo < 8.94 or not enabled else 2 if CC.rightBlinker else 1,
     "LCA_LEFT_ARROW": 2 if CC.leftBlinker else 0,
