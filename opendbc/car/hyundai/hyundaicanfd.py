@@ -124,55 +124,41 @@ def create_lfahda_cluster(packer, CAN, enabled):
   }
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
-def create_ccnc(packer, CAN, frame, CP, CC, CS):
-  ret = []
+def create_ccnc(packer, CAN, CP, CC, CS):
+  msg_161, msg_162, msg_1B5 = CS.msg_161, CS.msg_162, CS.msg_1B5
+  enabled, hud, latActive = CC.enabled, CC.hudControl, CC.latActive
 
-  msg_161 = CS.msg_161.copy()
-  msg_162 = CS.msg_162.copy()
-  msg_1B5 = CS.msg_1B5.copy()
-  enabled = CC.enabled
-  hud = CC.hudControl
-
-  # HIDE FAULTS
-  for f in ("FAULT_LSS", "FAULT_HDA", "FAULT_DAS", "FAULT_LFA", "FAULT_DAW"):
+  for f in {"FAULT_LSS", "FAULT_HDA", "FAULT_DAS", "FAULT_LFA", "FAULT_DAW"}:
     msg_162[f] = 0
 
-  # HIDE ALERTS
-  if msg_161.get("ALERTS_3") == 17:  # DRIVE_CAREFULLY
+  if msg_161["ALERTS_2"] == 5:  # CONSIDER_TAKING_A_BREAK
+    msg_161.update({"ALERTS_2": 0, "SOUNDS_2": 0})
+
+  if msg_161["ALERTS_3"] == 17:  # DRIVE_CAREFULLY
     msg_161["ALERTS_3"] = 0
 
-  if msg_161.get("ALERTS_5") == 2:  # WATCH_FOR_SURROUNDING_VEHICLES
+  if msg_161["ALERTS_5"] in (2, 4, 5):  # WATCH_FOR_SURROUNDING_VEHICLES, SMART_CRUISE_CONTROL_CONDITIONS_NOT_MET, USE_SWITCH_OR_PEDAL_TO_ACCELERATE
     msg_161["ALERTS_5"] = 0
 
-  if msg_161.get("ALERTS_5") == 4:  # SMART_CRUISE_CONTROL_CONDITIONS_NOT_MET
-    msg_161["ALERTS_5"] = 0
-
-  if msg_161.get("ALERTS_5") == 5:  # USE_SWITCH_OR_PEDAL_TO_ACCELERATE
-    msg_161["ALERTS_5"] = 0
-
-  if msg_161.get("ALERTS_2") == 5:  # CONSIDER_TAKING_A_BREAK
-    msg_161.update({"ALERTS_2": 0, "SOUNDS_2": 0})
-  msg_161["DAW_ICON"] = 0 # ALWAYS HIDE NOW THAT WE BLOCK MDPS
-
-  if msg_161.get("SOUNDS_4") == 2 and msg_161.get("LFA_ICON") in (3, 0,):  # LFA BEEPS
+  if msg_161["SOUNDS_4"] == 2 and msg_161["LFA_ICON"] in (3, 0,):  # LFA BEEPS
     msg_161["SOUNDS_4"] = 0
 
-  # ICONS, LANELINES
   msg_161.update({
-    "CENTERLINE": 1 if enabled else 0,
-    "LANELINE_LEFT": 2 if msg_1B5.get("LEFT") > 0 else 0,
-    "LANELINE_RIGHT": 2 if msg_1B5.get("RIGHT") > 0 else 0,
-    "LFA_ICON": 2 if enabled else 0,
-    "LKA_ICON": 4 if enabled else 4 if msg_1B5.get("LEFT") > 0 else 4 if msg_1B5.get("RIGHT") > 0 else 3,
+    "DAW_ICON": 0,
+    "LKA_ICON": 4 if latActive else 4 if msg_1B5.get("LEFT") > 0 else 4 if msg_1B5.get("RIGHT") > 0 else 3,
+    "LFA_ICON": 2 if latActive else 1,
+    "CENTERLINE": 1 if latActive else 0,
+    "LANELINE_LEFT": 2 if msg_1B5.get("LEFT") > 0 else 4 if hud.leftLaneDepart else 2 if CS.out.leftBlindspot or CS.out.vEgo < 8.94 else 6,
+    "LANELINE_RIGHT": 2 if msg_1B5.get("RIGHT") > 0 else 4 if hud.rightLaneDepart else 2 if CS.out.rightBlindspot or CS.out.vEgo < 8.94 else 6,
     "LCA_LEFT_ICON": 0 if CS.out.vEgo < 8.94 or not enabled else 2 if CC.leftBlinker else 1,
     "LCA_RIGHT_ICON": 0 if CS.out.vEgo < 8.94 or not enabled else 2 if CC.rightBlinker else 1,
     "LCA_LEFT_ARROW": 2 if CC.leftBlinker else 0,
     "LCA_RIGHT_ARROW": 2 if CC.rightBlinker else 0,
-    "LANE_LEFT": 1 if enabled and CC.leftBlinker and CS.out.vEgo > 8.94 else 0,
-    "LANE_RIGHT": 1 if enabled and CC.rightBlinker and CS.out.vEgo > 8.94 else 0,
+    "LANE_LEFT": 1 if CC.leftBlinker else 0,
+    "LANE_RIGHT": 1 if CC.rightBlinker else 0,
   })
 
-# LEAD
+  # LEAD
   if not enabled:
     base_distance = msg_1B5.get("LEAD_DISTANCE", 2000)
 
@@ -189,20 +175,10 @@ def create_ccnc(packer, CAN, frame, CP, CC, CS):
         "LEAD_DISTANCE": distance
     })
 
-# LANELINES
-  curvature = {
-    i: (31 if i == -1 else 13 - abs(i + 15)) if i < 0 else 15 + i
-    for i in range(-15, 16)
-  }
+  if hud.leftLaneDepart or hud.rightLaneDepart:
+    msg_162["VIBRATE"] = 1
 
-  msg_161.update({
-    "LANELINE_CURVATURE": curvature.get(max(-15, min(int(CS.out.steeringAngleDeg / 3), 15)), 14) if enabled else 15,
-  })
-
-  # OP LONG
   if CP.openpilotLongitudinalControl:
-
-    # SETSPEED, DISTANCE
     msg_161.update({
       "SETSPEED": 3 if enabled else 1,
       "SETSPEED_HUD": 2 if enabled else 1,
@@ -211,11 +187,14 @@ def create_ccnc(packer, CAN, frame, CP, CC, CS):
       "DISTANCE_SPACING": 1 if enabled else 0,
       "DISTANCE_LEAD": 2 if enabled and hud.leadVisible else 1 if enabled else 0,
       "DISTANCE_CAR": 2 if enabled else 1,
-      "ALERTS_3": hud.leadDistanceBars + 6,
-      "FCA_ICON": 1,
+      "SLA_ICON": 0,
+      "NAV_ICON": 0,
+      "TARGET": 0,
     })
 
-    # LEAD
+    if msg_161["ALERTS_3"] in (1, 2, 3, 4, 7, 8, 9, 10):  # HIDE ISLA, DISTANCE MESSAGES
+      msg_161["ALERTS_3"] = 0
+
     if enabled:
       base_distance = msg_1B5.get("LEAD_DISTANCE", 2000)
 
@@ -232,19 +211,12 @@ def create_ccnc(packer, CAN, frame, CP, CC, CS):
           "LEAD_DISTANCE": distance
       })
 
-  ret.append(packer.make_can_msg("CCNC_0x161", CAN.ECAN, msg_161))
-  ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, msg_162))
-
-  return ret
+  return [packer.make_can_msg(msg, CAN.ECAN, data) for msg, data in [("CCNC_0x161", msg_161), ("CCNC_0x162", msg_162)]]
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, cruise_info=None):
   jerk = 5
   jn = jerk / 50
-  if not enabled or gas_override:
-    a_val, a_raw = 0, 0
-  else:
-    a_raw = accel
-    a_val = np.clip(accel, accel_last - jn, accel_last + jn)
+  a_raw, a_val = (0, 0) if not enabled or gas_override else (accel, np.clip(accel, accel_last - jn, accel_last + jn))
 
   values = {
     "ACCMode": 0 if not enabled else (2 if gas_override else 1),
@@ -253,6 +225,8 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
     "aReqValue": a_val,
     "aReqRaw": a_raw,
     "VSetDis": set_speed,
+    "JerkLowerLimit": jerk if enabled else 1,
+    "JerkUpperLimit": 3.0,
     "ObjValid": 0,
     "OBJ_STATUS": 2,
     "SET_ME_2": 0x4,
@@ -261,18 +235,8 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
     "DISTANCE_SETTING": hud_control.leadDistanceBars,
   }
 
-  if cruise_info is None:
-    values.update({
-      "JerkLowerLimit": jerk if enabled else 1,
-      "JerkUpperLimit": 3.0,
-      "ACC_ObjDist": 1,
-    })
-  else:
-    values.update({
-      "JerkLowerLimit": 1.5 if enabled else 0,
-      "JerkUpperLimit": 0.5 if enabled else 0,
-      **{s: cruise_info[s] for s in ["ACC_ObjDist", "ACC_ObjRelSpd"]}
-    })
+  # fixes auto regen stuck on max for hybrids, should probably apply to all cars
+  values.update({"ACC_ObjDist": 1} if cruise_info is None else {s: cruise_info[s] for s in ["ACC_ObjDist", "ACC_ObjRelSpd"]})
 
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 

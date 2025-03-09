@@ -116,8 +116,8 @@ class CarController(CarControllerBase):
 
       # LFA and HDA icons
       if self.frame % 5 == 0 and (not lka_steering or lka_steering_long):
-        if self.CP.flags & HyundaiFlags.CCNC and not lka_steering:
-          can_sends.extend(hyundaicanfd.create_ccnc(self.packer, self.CAN, self.frame, self.CP, CC, CS))
+        if self.CP.flags & HyundaiFlags.CCNC:
+          can_sends.extend(hyundaicanfd.create_ccnc(self.packer, self.CAN, self.CP, CC, CS))
         else:
           can_sends.append(hyundaicanfd.create_lfahda_cluster(self.packer, self.CAN, CC.enabled))
 
@@ -132,8 +132,8 @@ class CarController(CarControllerBase):
           can_sends.extend(hyundaicanfd.create_fca_warning_light(self.packer, self.CAN, self.frame))
         if self.frame % 2 == 0:
           cruise_info = CS.cruise_info if self.CP.flags & HyundaiFlags.CCNC else None
-          can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping,
-                                                           CC.cruiseControl.override, set_speed_in_units, hud_control, cruise_info))
+          can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
+                                                           set_speed_in_units, hud_control, cruise_info))
           self.accel_last = accel
       else:
         # button presses
@@ -196,7 +196,7 @@ class CarController(CarControllerBase):
             self.last_button_frame = self.frame
           else:
             for _ in range(20):
-              can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.CANCEL))
+              can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.CANCEL))
             self.last_button_frame = self.frame
 
         # cruise standstill resume
@@ -206,7 +206,7 @@ class CarController(CarControllerBase):
             pass
           else:
             for _ in range(20):
-              can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter+1, Buttons.RES_ACCEL))
+              can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.RES_ACCEL))
             self.last_button_frame = self.frame
 
     return can_sends
