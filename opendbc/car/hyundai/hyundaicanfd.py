@@ -125,8 +125,9 @@ def create_lfahda_cluster(packer, CAN, enabled):
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
 def create_ccnc(packer, CAN, CP, CC, CS):
+
   msg_161, msg_162, msg_1B5 = CS.msg_161, CS.msg_162, CS.msg_1B5
-  enabled, hud, latActive = CC.enabled, CC.hudControl, CC.latActive
+  enabled, hud, latactive = CC.enabled, CC.hudControl, CC.latActive
 
   for f in {"FAULT_LSS", "FAULT_HDA", "FAULT_DAS", "FAULT_LFA", "FAULT_DAW"}:
     msg_162[f] = 0
@@ -145,18 +146,18 @@ def create_ccnc(packer, CAN, CP, CC, CS):
 
   msg_161.update({
     "DAW_ICON": 0,
-    "LKA_ICON": 4 if latActive else 4 if msg_1B5.get("LEFT") > 0 else 4 if msg_1B5.get("RIGHT") > 0 else 3,
-    "LFA_ICON": 2 if latActive else 1,
-    "CENTERLINE": 1 if latActive else 0,
+    "LKA_ICON": 4 if latactive else 4 if msg_1B5.get("LEFT") > 0 else 4 if msg_1B5.get("RIGHT") > 0 else 3,
+    "LFA_ICON": 2 if latactive else 1,
+    "CENTERLINE": 1 if latactive else 0,
     "LANELINE_LEFT": (
         2 if msg_1B5.get("LEFT") > 0 else
         4 if hud.leftLaneDepart else
-        6 if msg_1B5.get("LEFT") > 0 and not CS.out.leftBlindspot and CS.out.vEgo < 8.94 else 0
+        6 if msg_1B5.get("LEFT") > 0 and not CS.out.leftBlindspot and CS.out.vEgo > 8.94 else 0
     ),
     "LANELINE_RIGHT": (
         2 if msg_1B5.get("RIGHT") > 0 else
         4 if hud.rightLaneDepart else
-        6 if msg_1B5.get("RIGHT") > 0 and not CS.out.rightBlindspot and CS.out.vEgo < 8.94 else 0
+        6 if msg_1B5.get("RIGHT") > 0 and not CS.out.rightBlindspot and CS.out.vEgo > 8.94 else 0
     ),
     "LCA_LEFT_ICON": 0 if CS.out.vEgo < 8.94 or not enabled else 2 if CC.leftBlinker else 1,
     "LCA_RIGHT_ICON": 0 if CS.out.vEgo < 8.94 or not enabled else 2 if CC.rightBlinker else 1,
