@@ -28,11 +28,15 @@
   {.msg = {{ 0xaa, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 83U}, { 0 }, { 0 }}},  \
   {.msg = {{0x260, 0, 8, .ignore_counter = true, .quality_flag = (lta), .frequency = 50U}, { 0 }, { 0 }}},    \
 
-#define TOYOTA_RX_CHECKS(lta)                                                                          \
-  TOYOTA_COMMON_RX_CHECKS(lta)                                                                         \
-  {.msg = {{0x1D2, 0, 8, .ignore_counter = true, .frequency = 33U}, { 0 }, { 0 }}},                    \
-  {.msg = {{0x224, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 40U},           \
-           {0x226, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 40U}, { 0 }}},  \
+#define TOYOTA_RX_CHECKS(lta)                                                                                  \
+  TOYOTA_COMMON_RX_CHECKS(lta)                                                                                 \
+  {.msg = {{0x1D2, 0, 8, .ignore_counter = true, .frequency = 33U}, { 0 }, { 0 }}},                            \
+  {.msg = {{0x226, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 40U},  { 0 }, { 0 }}},  \
+
+#define TOYOTA_ALT_BRAKE_RX_CHECKS(lta)                                                                       \
+  TOYOTA_COMMON_RX_CHECKS(lta)                                                                                \
+  {.msg = {{0x1D2, 0, 8, .ignore_counter = true, .frequency = 33U}, { 0 }, { 0 }}},                           \
+  {.msg = {{0x224, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 40U}, { 0 }, { 0 }}},  \
 
 #define TOYOTA_SECOC_RX_CHECKS                                                                                \
   TOYOTA_COMMON_RX_CHECKS(false)                                                                              \
@@ -151,19 +155,18 @@ static void toyota_rx_hook(const CANPacket_t *to_push) {
 
 static bool toyota_tx_hook(const CANPacket_t *to_send) {
   const TorqueSteeringLimits TOYOTA_TORQUE_STEERING_LIMITS = {
-    .max_steer = 1500,
+    .max_torque = 1500,
     .max_rate_up = 15,          // ramp up slow
     .max_rate_down = 25,        // ramp down fast
     .max_torque_error = 350,    // max torque cmd in excess of motor torque
     .max_rt_delta = 450,        // the real time limit is 1800/sec, a 20% buffer
-    .max_rt_interval = 250000,
     .type = TorqueMotorLimited,
 
     // the EPS faults when the steering angle rate is above a certain threshold for too long. to prevent this,
     // we allow setting STEER_REQUEST bit to 0 while maintaining the requested torque value for a single frame
     .min_valid_request_frames = 18,
     .max_invalid_request_frames = 1,
-    .min_valid_request_rt_interval = 170000,  // 170ms; a ~10% buffer on cutting every 19 frames
+    .min_valid_request_rt_interval = 171000,  // 171ms; a ~10% buffer on cutting every 19 frames
     .has_steer_req_tolerance = true,
   };
 
@@ -381,8 +384,15 @@ static safety_config toyota_init(uint16_t param) {
     static RxCheck toyota_lka_rx_checks[] = {
       TOYOTA_RX_CHECKS(false)
     };
+    static RxCheck toyota_lka_alt_brake_rx_checks[] = {
+      TOYOTA_ALT_BRAKE_RX_CHECKS(false)
+    };
 
-    SET_RX_CHECKS(toyota_lka_rx_checks, ret);
+    if (!toyota_alt_brake) {
+      SET_RX_CHECKS(toyota_lka_rx_checks, ret);
+    } else {
+      SET_RX_CHECKS(toyota_lka_alt_brake_rx_checks, ret);
+    }
   }
 
   return ret;
