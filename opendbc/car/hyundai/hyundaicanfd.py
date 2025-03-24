@@ -124,7 +124,7 @@ def create_lfahda_cluster(packer, CAN, enabled, lfa_icon):
   }
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
-def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latactive, leftBlinker, rightBlinker, msg_161, msg_162, is_metric, out, lfa_icon):
+def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latactive, leftBlinker, rightBlinker, msg_161, msg_162, msg_1B5, is_metric, out, lfa_icon):
   for f in {"FAULT_LSS", "FAULT_HDA", "FAULT_DAS", "FAULT_LFA", "FAULT_DAW"}:
     msg_162[f] = 0
 
@@ -142,18 +142,35 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latacti
 
   msg_161.update({
     "DAW_ICON": 0,
-    "LKA_ICON": 0,
-    "LFA_ICON": 2 if lfa_icon else 0,
+    "LKA_ICON": 4 if enabled else 4 if msg_1B5.get("LEFT") > 0 else 4 if msg_1B5.get("RIGHT") > 0 else 3,
+    "LFA_ICON": 2 if enabled else 0,
     "CENTERLINE": 1 if enabled else 0,
-    "LANELINE_LEFT": (
-      1 if not hud.leftLaneVisible else 4 if hud.leftLaneDepart else 0 if not enabled else 2 if out.leftBlindspot or out.vEgo < 8.94 else 6),
-    "LANELINE_RIGHT": (
-      1 if not hud.rightLaneVisible else 4 if hud.rightLaneDepart else 0 if not enabled else 2 if out.rightBlindspot or out.vEgo < 8.94 else 6),
+    "LANELINE_LEFT": 2 if msg_1B5.get("LEFT") > 0 else 0,
+    "LANELINE_RIGHT": 2 if msg_1B5.get("RIGHT") > 0 else 0,
     "LCA_LEFT_ARROW": 2 if leftBlinker else 0,
     "LCA_RIGHT_ARROW": 2 if rightBlinker else 0,
+    "LCA_LEFT_ICON": 0 if out.vEgo < 8.94 or not enabled else 2 if leftBlinker else 1,
+    "LCA_RIGHT_ICON": 0 if out.vEgo < 8.94 or not enabled else 2 if rightBlinker else 1,
     "LANE_LEFT": 1 if leftBlinker else 0,
     "LANE_RIGHT": 1 if rightBlinker else 0,
   })
+
+  # LEAD
+  if not enabled:
+    base_distance = msg_1B5.get("LEAD_DISTANCE", 2000)
+
+    if msg_1B5.get("LEAD") > 0:
+        lead_status = 1 if msg_1B5.get("LEAD_3") == 1 else 2
+        distance = max(0, min(base_distance, 2000))
+    else:
+        # No lead detected
+        lead_status = 0
+        distance = 2000
+
+    msg_162.update({
+        "LEAD": lead_status,
+        "LEAD_DISTANCE": distance
+    })
 
   if hud.leftLaneDepart or hud.rightLaneDepart:
     msg_162["VIBRATE"] = 1
@@ -178,7 +195,21 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latacti
       "TARGET": 0,
     })
 
-    msg_162["LEAD"] = 0
+    if enabled:
+      base_distance = msg_1B5.get("LEAD_DISTANCE", 2000)
+
+      if msg_1B5.get("LEAD") > 0:
+          lead_status = 1 if msg_1B5.get("LEAD_3") == 1 else 2
+          distance = max(0, min(base_distance, 2000))
+      else:
+          # No lead detected
+          lead_status = 0
+          distance = 2000
+
+      msg_162.update({
+          "LEAD": lead_status,
+          "LEAD_DISTANCE": distance
+      })
 
   return [packer.make_can_msg(msg, CAN.ECAN, data) for msg, data in [("CCNC_0x161", msg_161), ("CCNC_0x162", msg_162)]]
 
