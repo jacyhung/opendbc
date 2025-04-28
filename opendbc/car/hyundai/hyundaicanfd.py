@@ -125,6 +125,13 @@ def create_lfahda_cluster(packer, CAN, enabled):
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
 def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latactive, leftBlinker, rightBlinker, msg_161, msg_162, msg_1B5, is_metric, out):
+  # Curvature mapping dictionary based on previous implementation
+  # Maps an intermediate value (-15 to 15) to the final CAN value (0-31)
+  curvature_map = {
+    i: (31 if i == -1 else 13 - abs(i + 15)) if i < 0 else 15 + i
+    for i in range(-15, 16)
+  }
+
   for f in {"FAULT_LSS", "FAULT_HDA", "FAULT_DAS", "FAULT_LFA", "FAULT_DAW"}:
     msg_162[f] = 0
 
@@ -160,10 +167,12 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latacti
   sm.update(0)  # Non-blocking update
   lane_pos_left = 15  # Default to center
   lane_pos_right = 15 # Default to center
+  model_can_curvature = 15 # Default to straight (CAN value)
 
   if msg_1B5.get("LEFT") > 0 and msg_1B5.get("RIGHT") > 0:
     if sm.valid['modelV2'] and sm.updated['modelV2']:
       model_v2 = sm['modelV2']
+      # Lane Position Calculation
       if len(model_v2.laneLines) > 1 and len(model_v2.laneLines[0].y) > 0 and len(model_v2.laneLines[1].y) > 0:
         ll_left = model_v2.laneLines[0]
         ll_right = model_v2.laneLines[1]
@@ -172,8 +181,22 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latacti
         lane_pos_left = int(np.clip(15 + (dist_l * 5), 0, 30))
         lane_pos_right = int(np.clip(15 - (dist_r * 5), 0, 30))
 
+      # Lane Curvature Calculation using non-linear map
+      # Scale desiredCurvature (1/m) to the dict input range (-15 to 15)
+      # Factor 375 maps approx +/-0.04 curvature to +/-15. May need tuning.
+      curvature_scale_factor = 375
+      desired_curvature = model_v2.action.desiredCurvature
+      intermediate_curvature_key = int(round(desired_curvature * curvature_scale_factor))
+      # Clamp the key to the dictionary's range
+      clamped_key = max(-15, min(intermediate_curvature_key, 15))
+      # Lookup the final CAN value using the non-linear map
+      model_can_curvature = curvature_map.get(clamped_key, 15) # Default to 15 (straight)
+
+
   msg_161["LANELINE_LEFT_POSITION"] = lane_pos_left
   msg_161["LANELINE_RIGHT_POSITION"] = lane_pos_right
+  # Use the mapped curvature value
+  msg_161["LANELINE_CURVATURE"] = model_can_curvature if enabled else 15
 
   # LEAD
   if not enabled:
