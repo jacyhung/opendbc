@@ -195,8 +195,8 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latacti
 
   msg_161["LANELINE_LEFT_POSITION"] = lane_pos_left
   msg_161["LANELINE_RIGHT_POSITION"] = lane_pos_right
-  # Use the mapped curvature value
-  msg_161["LANELINE_CURVATURE"] = model_can_curvature if enabled else 15
+  # Use the mapped curvature value, always sending the model-based value
+  msg_161["LANELINE_CURVATURE"] = model_can_curvature
 
   # LEAD
   if not enabled:
