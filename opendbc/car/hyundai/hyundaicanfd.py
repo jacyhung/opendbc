@@ -4,8 +4,6 @@ import numpy as np
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai.values import HyundaiFlags
-from cereal.messaging import messaging
-
 
 class CanBus(CanBusBase):
   def __init__(self, CP, fingerprint=None, lka_steering=None) -> None:
