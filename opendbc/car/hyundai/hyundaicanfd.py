@@ -1,8 +1,10 @@
 import copy
+from cereal import messaging
 import numpy as np
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai.values import HyundaiFlags
+from cereal.messaging import messaging
 
 
 class CanBus(CanBusBase):
@@ -154,6 +156,26 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latacti
     "LANE_LEFT": 1 if leftBlinker else 0,
     "LANE_RIGHT": 1 if rightBlinker else 0,
   })
+
+  # Lane position
+  sm = messaging.SubMaster(['modelV2'])
+  sm.update(0)  # Non-blocking update
+  lane_pos_left = 15  # Default to center
+  lane_pos_right = 15 # Default to center
+
+  if msg_1B5.get("LEFT") > 0 and msg_1B5.get("RIGHT") > 0:
+    if sm.valid['modelV2'] and sm.updated['modelV2']:
+      model_v2 = sm['modelV2']
+      if len(model_v2.laneLines) > 1 and len(model_v2.laneLines[0].y) > 0 and len(model_v2.laneLines[1].y) > 0:
+        ll_left = model_v2.laneLines[0]
+        ll_right = model_v2.laneLines[1]
+        dist_l = -ll_left.y[0]
+        dist_r = ll_right.y[0]
+        lane_pos_left = int(np.clip(15 + (dist_l * 5), 0, 30))
+        lane_pos_right = int(np.clip(15 - (dist_r * 5), 0, 30))
+
+  msg_161["LANELINE_LEFT_POSITION"] = lane_pos_left
+  msg_161["LANELINE_RIGHT_POSITION"] = lane_pos_right
 
   # LEAD
   if not enabled:
