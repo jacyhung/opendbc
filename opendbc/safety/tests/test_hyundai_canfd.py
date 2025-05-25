@@ -159,13 +159,8 @@ class TestHyundaiCanfdLFASteeringAltButtons(TestHyundaiCanfdLFASteeringAltButton
 class TestHyundaiCanfdLKASteeringEV(TestHyundaiCanfdBase):
 
   TX_MSGS = [[0x50, 0], [0x1CF, 1], [0x2A4, 0]]
-<<<<<<< HEAD
-  RELAY_MALFUNCTION_ADDRS = {0: (0x50,)}  # LKAS
-  FWD_BLACKLISTED_ADDRS = {2: [0x50, 0x2a4, 0x161, 0x162]}
-=======
   RELAY_MALFUNCTION_ADDRS = {0: (0x50, 0x2a4)}  # LKAS, CAM_0x2A4
   FWD_BLACKLISTED_ADDRS = {2: [0x50, 0x2a4]}
->>>>>>> origin/master
 
   PT_BUS = 1
   SCC_BUS = 1
@@ -183,13 +178,8 @@ class TestHyundaiCanfdLKASteeringEV(TestHyundaiCanfdBase):
 class TestHyundaiCanfdLKASteeringAltEV(TestHyundaiCanfdBase):
 
   TX_MSGS = [[0x110, 0], [0x1CF, 1], [0x362, 0]]
-<<<<<<< HEAD
-  RELAY_MALFUNCTION_ADDRS = {0: (0x110,)}  # LKAS_ALT
-  FWD_BLACKLISTED_ADDRS = {2: [0x110, 0x362, 0x161, 0x162]}
-=======
   RELAY_MALFUNCTION_ADDRS = {0: (0x110, 0x362)}  # LKAS_ALT, CAM_0x362
   FWD_BLACKLISTED_ADDRS = {2: [0x110, 0x362]}
->>>>>>> origin/master
 
   PT_BUS = 1
   SCC_BUS = 1

@@ -124,7 +124,18 @@ def create_lfahda_cluster(packer, CAN, enabled):
   }
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
-def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latactive, leftBlinker, rightBlinker, msg_161, msg_162, msg_1B5, is_metric, out):
+def meters_to_ui_units(meters: float, nominal_m: float = 1.7, center_ui: int = 15, scale_per_m: float = 15/1.7) -> int:
+  value = abs(int(round(center_ui + (meters - nominal_m) * scale_per_m)))
+  return value
+
+def normalize_lane_lines(left_m: float, right_m: float, total_ui: int = 30) -> tuple[int, int]:
+  total_m = left_m + right_m
+  left_ui = round((left_m / total_m) * total_ui)
+  right_ui = total_ui - left_ui
+  return left_ui, right_ui
+
+def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBlinker, rightBlinker, msg_161, msg_162, msg_1b5,
+                is_metric, main_cruise_enabled, out, lfa_icon):
   for f in {"FAULT_LSS", "FAULT_HDA", "FAULT_DAS", "FAULT_LFA", "FAULT_DAW"}:
     msg_162[f] = 0
 
@@ -142,11 +153,13 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latacti
 
   msg_161.update({
     "DAW_ICON": 0,
-    "LKA_ICON": 4 if enabled else 4 if msg_1B5.get("LEFT") > 0 else 4 if msg_1B5.get("RIGHT") > 0 else 3,
+    "LKA_ICON": 4 if enabled else 4 if msg_1b5.get("LEFT") > 0 else 4 if msg_1b5.get("RIGHT") > 0 else 3,
     "LFA_ICON": 2 if enabled else 0,
     "CENTERLINE": 1 if enabled else 0,
-    "LANELINE_LEFT": 2 if msg_1B5.get("LEFT") > 0 else 0,
-    "LANELINE_RIGHT": 2 if msg_1B5.get("RIGHT") > 0 else 0,
+    "LANELINE_LEFT": (0 if not msg_1b5.get("LEFT") > 0 else 4 if hud.leftLaneDepart else 
+                      2 if out.leftBlindspot or out.vEgo < 8.94 else 6),
+    "LANELINE_RIGHT": (0 if not msg_1b5.get("RIGHT") > 0 else 4 if hud.rightLaneDepart else 
+                       2 if out.rightBlindspot or out.vEgo < 8.94 else 6),
     "LCA_LEFT_ARROW": 2 if leftBlinker else 0,
     "LCA_RIGHT_ARROW": 2 if rightBlinker else 0,
     "LCA_LEFT_ICON": 0 if out.vEgo < 8.94 or not enabled else 2 if leftBlinker else 1,
@@ -157,10 +170,10 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latacti
 
   # LEAD
   if not enabled:
-    base_distance = msg_1B5.get("LEAD_DISTANCE", 2000)
+    base_distance = msg_1b5.get("LEAD_DISTANCE", 2000)
 
-    if msg_1B5.get("LEAD") > 0:
-        lead_status = 1 if msg_1B5.get("LEAD_3") == 1 else 2
+    if msg_1b5.get("LEAD") > 0:
+        lead_status = 1 if msg_1b5.get("LEAD_3") == 1 else 2
         distance = max(0, min(base_distance, 2000))
     else:
         # No lead detected
@@ -171,6 +184,31 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latacti
         "LEAD": lead_status,
         "LEAD_DISTANCE": distance
     })
+
+  # LANELINES
+  leftlane = meters_to_ui_units(msg_1b5["LEFT_POSITION"])
+  rightlane = meters_to_ui_units(msg_1b5["RIGHT_POSITION"])
+
+  leftlanequal = msg_1b5["LEFT_QUAL"]
+  rightlanequal = msg_1b5["RIGHT_QUAL"]
+
+  if leftlanequal not in (2, 3):
+    leftlane = 0
+  if rightlanequal not in (2, 3):
+    rightlane = 0
+
+  if leftlane == rightlane == 0:
+    leftlane = 15
+    rightlane = 15
+  elif leftlane == 0:
+    leftlane = 30 - rightlane
+  elif rightlane == 0:
+    rightlane = 30 - leftlane
+
+  leftlane, rightlane = normalize_lane_lines(leftlane, rightlane)
+
+  msg_161["LANELINE_LEFT_POSITION"] = leftlane
+  msg_161["LANELINE_RIGHT_POSITION"] = rightlane
 
   if hud.leftLaneDepart or hud.rightLaneDepart:
     msg_162["VIBRATE"] = 1
@@ -196,10 +234,10 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, latacti
     })
 
     if enabled:
-      base_distance = msg_1B5.get("LEAD_DISTANCE", 2000)
+      base_distance = msg_1b5.get("LEAD_DISTANCE", 2000)
 
-      if msg_1B5.get("LEAD") > 0:
-          lead_status = 1 if msg_1B5.get("LEAD_3") == 1 else 2
+      if msg_1b5.get("LEAD") > 0:
+          lead_status = 1 if msg_1b5.get("LEAD_3") == 1 else 2
           distance = max(0, min(base_distance, 2000))
       else:
           # No lead detected

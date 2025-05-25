@@ -60,7 +60,11 @@ class CarState(CarStateBase):
     self.cruise_info = {}
     self.msg_161 = {}
     self.msg_162 = {}
+<<<<<<< HEAD
     self.msg_1B5 = {}
+=======
+    self.msg_1b5 = {}
+>>>>>>> 17bdf879 (laneline positioning)
 
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0
@@ -266,7 +270,11 @@ class CarState(CarStateBase):
 
     alt = ""
     if self.CP.flags & HyundaiFlags.CCNC and not self.CP.flags & HyundaiFlags.CANFD_LKA_STEERING:
+<<<<<<< HEAD
       self.msg_161, self.msg_162, self.msg_1B5 = map(copy.copy, (cp_cam.vl["CCNC_0x161"], cp_cam.vl["CCNC_0x162"], cp_cam.vl["CCNC_0x1B5"]))
+=======
+      self.msg_161, self.msg_162, self.msg_1b5 = map(copy.copy, (cp_cam.vl["CCNC_0x161"], cp_cam.vl["CCNC_0x162"], cp_cam.vl["CCNC_0x1B5"]))
+>>>>>>> 17bdf879 (laneline positioning)
       self.cruise_info = copy.copy((cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp).vl["SCC_CONTROL"])
       alt = "_ALT"
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][f"LEFT_LAMP{alt}"],
