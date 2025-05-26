@@ -159,10 +159,8 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     "LKA_ICON": 4 if enabled else 4 if msg_1b5.get("LEFT_QUAL", 0) > 0 else 4 if msg_1b5.get("RIGHT_QUAL", 0) > 0 else 3,
     "LFA_ICON": 2 if enabled else 0,
     "CENTERLINE": 1 if enabled else 0,
-    "LANELINE_LEFT": (0 if not msg_1b5.get("LEFT_QUAL", 0) > 0 else 4 if hud.leftLaneDepart else 
-                      2 if out.leftBlindspot or out.vEgo < 8.94 else 6),
-    "LANELINE_RIGHT": (0 if not msg_1b5.get("RIGHT_QUAL", 0) > 0 else 4 if hud.rightLaneDepart else 
-                       2 if out.rightBlindspot or out.vEgo < 8.94 else 6),
+    "LANELINE_LEFT": (2 if msg_1b5.get("LEFT_QUAL", 0) > 0 else 4 if hud.leftLaneDepart else 0),
+    "LANELINE_RIGHT": (2 if msg_1b5.get("RIGHT_QUAL", 0) > 0 else 4 if hud.rightLaneDepart else 0),
     "LCA_LEFT_ARROW": 2 if leftBlinker else 0,
     "LCA_RIGHT_ARROW": 2 if rightBlinker else 0,
     "LCA_LEFT_ICON": 0 if out.vEgo < 8.94 or not enabled else 2 if leftBlinker else 1,
