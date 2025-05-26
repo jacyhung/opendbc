@@ -151,6 +151,9 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
   if msg_161["SOUNDS_4"] == 2 and msg_161["LFA_ICON"] in (3, 0,):  # LFA BEEPS
     msg_161["SOUNDS_4"] = 0
 
+  # curve
+  curvature = {i: (31 if i == -1 else 13 - abs(i + 15)) if i < 0 else 15 + i for i in range(-15, 16)}
+
   msg_161.update({
     "DAW_ICON": 0,
     "LKA_ICON": 4 if enabled else 4 if msg_1b5.get("LEFT") > 0 else 4 if msg_1b5.get("RIGHT") > 0 else 3,
@@ -166,6 +169,7 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     "LCA_RIGHT_ICON": 0 if out.vEgo < 8.94 or not enabled else 2 if rightBlinker else 1,
     "LANE_LEFT": 1 if leftBlinker else 0,
     "LANE_RIGHT": 1 if rightBlinker else 0,
+    "LANELINE_CURVATURE": curvature.get(max(-15, min(int(out.steeringAngleDeg / 3), 15)), 14) if enabled else 15,
   })
 
   # LEAD
