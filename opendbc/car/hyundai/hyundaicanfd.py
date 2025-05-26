@@ -135,7 +135,7 @@ def normalize_lane_lines(left_m: float, right_m: float, total_ui: int = 30) -> t
   return left_ui, right_ui
 
 def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBlinker, rightBlinker, msg_161, msg_162, msg_1b5,
-                is_metric, main_cruise_enabled, out, lfa_icon):
+                is_metric, out):
   for f in {"FAULT_LSS", "FAULT_HDA", "FAULT_DAS", "FAULT_LFA", "FAULT_DAW"}:
     msg_162[f] = 0
 
