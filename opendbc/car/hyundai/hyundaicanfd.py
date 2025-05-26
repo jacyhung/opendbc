@@ -156,12 +156,12 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
 
   msg_161.update({
     "DAW_ICON": 0,
-    "LKA_ICON": 4 if enabled else 4 if msg_1b5.get("LEFT") > 0 else 4 if msg_1b5.get("RIGHT") > 0 else 3,
+    "LKA_ICON": 4 if enabled else 4 if msg_1b5.get("LEFT", 0) > 0 else 4 if msg_1b5.get("RIGHT", 0) > 0 else 3,
     "LFA_ICON": 2 if enabled else 0,
     "CENTERLINE": 1 if enabled else 0,
-    "LANELINE_LEFT": (0 if not msg_1b5.get("LEFT") > 0 else 4 if hud.leftLaneDepart else 
+    "LANELINE_LEFT": (0 if not msg_1b5.get("LEFT", 0) > 0 else 4 if hud.leftLaneDepart else 
                       2 if out.leftBlindspot or out.vEgo < 8.94 else 6),
-    "LANELINE_RIGHT": (0 if not msg_1b5.get("RIGHT") > 0 else 4 if hud.rightLaneDepart else 
+    "LANELINE_RIGHT": (0 if not msg_1b5.get("RIGHT", 0) > 0 else 4 if hud.rightLaneDepart else 
                        2 if out.rightBlindspot or out.vEgo < 8.94 else 6),
     "LCA_LEFT_ARROW": 2 if leftBlinker else 0,
     "LCA_RIGHT_ARROW": 2 if rightBlinker else 0,
@@ -176,8 +176,8 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
   if not enabled:
     base_distance = msg_1b5.get("LEAD_DISTANCE", 2000)
 
-    if msg_1b5.get("LEAD") > 0:
-        lead_status = 1 if msg_1b5.get("LEAD_3") == 1 else 2
+    if msg_1b5.get("LEAD", 0) > 0:
+        lead_status = 1 if msg_1b5.get("LEAD_3", 0) == 1 else 2
         distance = max(0, min(base_distance, 2000))
     else:
         # No lead detected
@@ -190,11 +190,11 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     })
 
   # LANELINES
-  leftlane = meters_to_ui_units(msg_1b5["LEFT_POSITION"])
-  rightlane = meters_to_ui_units(msg_1b5["RIGHT_POSITION"])
+  leftlane = meters_to_ui_units(msg_1b5.get("LEFT_POSITION", 0))
+  rightlane = meters_to_ui_units(msg_1b5.get("RIGHT_POSITION", 0))
 
-  leftlanequal = msg_1b5["LEFT_QUAL"]
-  rightlanequal = msg_1b5["RIGHT_QUAL"]
+  leftlanequal = msg_1b5.get("LEFT_QUAL", 0)
+  rightlanequal = msg_1b5.get("RIGHT_QUAL", 0)
 
   if leftlanequal not in (2, 3):
     leftlane = 0
@@ -240,8 +240,8 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     if enabled:
       base_distance = msg_1b5.get("LEAD_DISTANCE", 2000)
 
-      if msg_1b5.get("LEAD") > 0:
-          lead_status = 1 if msg_1b5.get("LEAD_3") == 1 else 2
+      if msg_1b5.get("LEAD", 0) > 0:
+          lead_status = 1 if msg_1b5.get("LEAD_3", 0) == 1 else 2
           distance = max(0, min(base_distance, 2000))
       else:
           # No lead detected
