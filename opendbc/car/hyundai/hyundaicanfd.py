@@ -175,7 +175,7 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     base_distance = msg_1b5.get("LEAD_DISTANCE", 2000)
 
     if msg_1b5.get("LEAD", 0) > 0:
-        lead_status = 1 if msg_1b5.get("LEAD_3", 0) == 1 else 2
+        lead_status = 2
         distance = max(0, min(base_distance, 2000))
     else:
         # No lead detected
@@ -188,23 +188,31 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     })
 
   # LANELINES
-  leftlane = meters_to_ui_units(msg_1b5.get("LEFT_POSITION", 0))
-  rightlane = meters_to_ui_units(msg_1b5.get("RIGHT_POSITION", 0))
-
-  leftlanequal = msg_1b5.get("LEFT_QUAL", 0)
-  rightlanequal = msg_1b5.get("RIGHT_QUAL", 0)
+  leftlanequal = msg_1b5["LEFT_QUAL"]
+  rightlanequal = msg_1b5["RIGHT_QUAL"]
+  leftlaneraw = msg_1b5["LEFT_POSITION"]
+  rightlaneraw = msg_1b5["RIGHT_POSITION"]
+  leftlaneorig = meters_to_ui_units(leftlaneraw)
+  rightlaneorig = meters_to_ui_units(rightlaneraw)
+  leftlane = leftlaneorig
+  rightlane = rightlaneorig
 
   if leftlanequal not in (2, 3):
     leftlane = 0
   if rightlanequal not in (2, 3):
     rightlane = 0
 
-  if leftlane == rightlane == 0:
+  if leftlaneraw == -2.0248375:
+    leftlane = 30 - rightlane
+  if rightlaneraw == 2.0248375:
+    rightlane = 30 - leftlane
+
+  if leftlaneraw == rightlaneraw == 0:
     leftlane = 15
     rightlane = 15
-  elif leftlane == 0:
+  elif leftlaneraw == 0:
     leftlane = 30 - rightlane
-  elif rightlane == 0:
+  elif rightlaneraw == 0:
     rightlane = 30 - leftlane
 
   leftlane, rightlane = normalize_lane_lines(leftlane, rightlane)
