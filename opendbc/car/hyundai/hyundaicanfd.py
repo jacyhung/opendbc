@@ -158,49 +158,65 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
 
   msg_161.update({
     "DAW_ICON": 0,
-    "LKA_ICON": 0,
+    "LKA_ICON": 4 if lfa_icon else 4 if msg_1b5.get("LEFT_QUAL", 0) > 0 else 4 if msg_1b5.get("RIGHT_QUAL", 0) > 0 else 3,
     "LFA_ICON": 2 if lfa_icon else 0,
     "CENTERLINE": 1 if lfa_icon else 0,
     "LANELINE_CURVATURE": (min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lfa_icon else 0,
     "LANELINE_CURVATURE_DIRECTION": 1 if curvature < 0 and lfa_icon else 0,
-    "LANELINE_LEFT": (0 if not lfa_icon else 1 if not hud.leftLaneVisible else 4 if hud.leftLaneDepart else 6 if leftBlinker or rightBlinker else 2),
-    "LANELINE_RIGHT": (0 if not lfa_icon else 1 if not hud.rightLaneVisible else 4 if hud.rightLaneDepart else 6 if leftBlinker or rightBlinker else 2),
+    "LANELINE_LEFT": (2 if msg_1b5.get("LEFT_QUAL", 0) > 0 else 4 if hud.leftLaneDepart else 0),
+    "LANELINE_RIGHT": (2 if msg_1b5.get("RIGHT_QUAL", 0) > 0 else 4 if hud.rightLaneDepart else 0),
     "LCA_LEFT_ICON": (0 if not lfa_icon or out.vEgo < LANE_CHANGE_SPEED_MIN else 1 if out.leftBlindspot else 2 if leftBlinker or rightBlinker else 4),
     "LCA_RIGHT_ICON": (0 if not lfa_icon or out.vEgo < LANE_CHANGE_SPEED_MIN else 1 if out.rightBlindspot else 2 if leftBlinker or rightBlinker else 4),
     "LCA_LEFT_ARROW": 2 if leftBlinker else 0,
     "LCA_RIGHT_ARROW": 2 if rightBlinker else 0,
   })
+  
+  # LEAD
+  if not enabled:
+    base_distance = msg_1b5.get("LEAD_DISTANCE", 2000)
 
-  if lfa_icon and (leftBlinker or rightBlinker):
-    leftlanequal = msg_1b5["LEFT_QUAL"]
-    rightlanequal = msg_1b5["RIGHT_QUAL"]
-    leftlaneraw = msg_1b5["LEFT_POSITION"]
-    rightlaneraw = msg_1b5["RIGHT_POSITION"]
-    leftlane = meters_to_ui_units(leftlaneraw)
-    rightlane = meters_to_ui_units(rightlaneraw)
+    if msg_1b5.get("LEAD", 0) > 0:
+        lead_status = 2
+        distance = max(0, min(base_distance, 2000))
+    else:
+        # No lead detected
+        lead_status = 0
+        distance = 2000
 
-    if leftlanequal not in (2, 3):
-      leftlane = 0
-    if rightlanequal not in (2, 3):
-      rightlane = 0
+    msg_162.update({
+        "LEAD": lead_status,
+        "LEAD_DISTANCE": distance
+    })
 
-    if leftlaneraw == -2.0248375:
-      leftlane = 30 - rightlane
-    if rightlaneraw == 2.0248375:
-      rightlane = 30 - leftlane
+  leftlanequal = msg_1b5["LEFT_QUAL"]
+  rightlanequal = msg_1b5["RIGHT_QUAL"]
+  leftlaneraw = msg_1b5["LEFT_POSITION"]
+  rightlaneraw = msg_1b5["RIGHT_POSITION"]
+  leftlane = meters_to_ui_units(leftlaneraw)
+  rightlane = meters_to_ui_units(rightlaneraw)
 
-    if leftlaneraw == rightlaneraw == 0:
-      leftlane = 15
-      rightlane = 15
-    elif leftlaneraw == 0:
-      leftlane = 30 - rightlane
-    elif rightlaneraw == 0:
-      rightlane = 30 - leftlane
+  if leftlanequal not in (2, 3):
+    leftlane = 0
+  if rightlanequal not in (2, 3):
+    rightlane = 0
 
-    leftlane, rightlane = normalize_lane_lines(leftlane, rightlane)
+  if leftlaneraw == -2.0248375:
+    leftlane = 30 - rightlane
+  if rightlaneraw == 2.0248375:
+    rightlane = 30 - leftlane
 
-    msg_161["LANELINE_LEFT_POSITION"] = leftlane
-    msg_161["LANELINE_RIGHT_POSITION"] = rightlane
+  if leftlaneraw == rightlaneraw == 0:
+    leftlane = 15
+    rightlane = 15
+  elif leftlaneraw == 0:
+    leftlane = 30 - rightlane
+  elif rightlaneraw == 0:
+    rightlane = 30 - leftlane
+
+  leftlane, rightlane = normalize_lane_lines(leftlane, rightlane)
+
+  msg_161["LANELINE_LEFT_POSITION"] = leftlane
+  msg_161["LANELINE_RIGHT_POSITION"] = rightlane
 
   if hud.leftLaneDepart or hud.rightLaneDepart:
     msg_162["VIBRATE"] = 1
