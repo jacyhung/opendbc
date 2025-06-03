@@ -210,7 +210,6 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
   clipped_curvature = max(0, min(0.032767, abs(curvature)))
   scaled_curvature = round((clipped_curvature / 0.032767) * 15)
   value = max(0, min(scaled_curvature, 15) + (-1 if curvature < 0 else 0))
-  print(f"{curvature}\t{clipped_curvature}\t{scaled_curvature}\t{value}")
 
   msg_161["LANELINE_CURVATURE"] = value
   msg_161["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 else 0
