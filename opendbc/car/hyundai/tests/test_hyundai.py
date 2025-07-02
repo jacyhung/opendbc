@@ -7,7 +7,7 @@ from opendbc.car.structs import CarParams
 from opendbc.car.fw_versions import build_fw_dict
 from opendbc.car.hyundai.interface import CarInterface
 from opendbc.car.hyundai.hyundaicanfd import CanBus
-from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR
+from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR_CAN
 from opendbc.car.hyundai.values import CAMERA_SCC_CAR, CANFD_CAR, CAN_GEARS, CAR, CHECKSUM, DATE_FW_ECUS, \
                                          HYBRID_CAR, EV_CAR, FW_QUERY_CONFIG, LEGACY_SAFETY_MODE_CAR, CANFD_FUZZY_WHITELIST, \
                                          UNSUPPORTED_LONGITUDINAL_CAR, PLATFORM_CODE_ECUS, HYUNDAI_VERSION_REQUEST_LONG, \
@@ -22,7 +22,9 @@ NO_DATES_PLATFORMS = {
   # CAN FD
   CAR.KIA_SPORTAGE_5TH_GEN,
   CAR.HYUNDAI_SANTA_CRUZ_1ST_GEN,
+  CAR.HYUNDAI_SANTA_CRUZ_2025,
   CAR.HYUNDAI_TUCSON_4TH_GEN,
+  CAR.HYUNDAI_TUCSON_HEV_2025,
   # CAN
   CAR.HYUNDAI_ELANTRA,
   CAR.HYUNDAI_ELANTRA_GT_I30,
@@ -51,22 +53,22 @@ class TestHyundaiFingerprint:
       if lka_steering:
         cam_can = CanBus(None, fingerprint).CAM
         fingerprint[cam_can] = [0x50, 0x110]  # LKA steering messages
-      CP = CarInterface.get_params(CAR.KIA_EV6, fingerprint, [], False, False)
+      CP = CarInterface.get_params(CAR.KIA_EV6, fingerprint, [], False, False, False)
       assert bool(CP.flags & HyundaiFlags.CANFD_LKA_STEERING) == lka_steering
 
     # radar available
     for radar in (True, False):
       fingerprint = gen_empty_fingerprint()
       if radar:
-        fingerprint[1][RADAR_START_ADDR] = 8
-      CP = CarInterface.get_params(CAR.HYUNDAI_SONATA, fingerprint, [], False, False)
+        fingerprint[1][RADAR_START_ADDR_CAN] = 8
+      CP = CarInterface.get_params(CAR.HYUNDAI_SONATA, fingerprint, [], False, False, False)
       assert CP.radarUnavailable != radar
 
   def test_alternate_limits(self):
     # Alternate lateral control limits, for high torque cars, verify Panda safety mode flag is set
     fingerprint = gen_empty_fingerprint()
     for car_model in CAR:
-      CP = CarInterface.get_params(car_model, fingerprint, [], False, False)
+      CP = CarInterface.get_params(car_model, fingerprint, [], False, False, False)
       assert bool(CP.flags & HyundaiFlags.ALT_LIMITS) == bool(CP.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.ALT_LIMITS)
 
   def test_can_features(self):

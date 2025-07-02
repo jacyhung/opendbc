@@ -3,7 +3,7 @@ from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, \
                                                    CANFD_UNSUPPORTED_LONGITUDINAL_CAR, \
                                                    UNSUPPORTED_LONGITUDINAL_CAR, HyundaiSafetyFlags
-from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR
+from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR_CAN, RADAR_START_ADDR_CANFD
 from opendbc.car.interfaces import CarInterfaceBase
 from opendbc.car.disable_ecu import disable_ecu
 from opendbc.car.hyundai.carcontroller import CarController
@@ -23,9 +23,13 @@ class CarInterface(CarInterfaceBase):
   RadarInterface = RadarInterface
 
   @staticmethod
-  def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, docs) -> structs.CarParams:
+  def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
     ret.brand = "hyundai"
 
+    # "LKA steering" if LKAS or LKAS_ALT messages are seen coming from the camera.
+    # Generally means our LKAS message is forwarded to another ECU (commonly ADAS ECU)
+    # that finally retransmits our steering command in LFA or LFA_ALT to the MDPS.
+    # "LFA steering" if camera directly sends LFA to the MDPS
     cam_can = CanBus(None, fingerprint).CAM
     lka_steering = 0x50 in fingerprint[cam_can] or 0x110 in fingerprint[cam_can]
     CAN = CanBus(None, fingerprint, lka_steering)
@@ -76,6 +80,8 @@ class CarInterface(CarInterfaceBase):
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_ALT_BUTTONS.value
       if ret.flags & HyundaiFlags.CANFD_CAMERA_SCC:
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CAMERA_SCC.value
+      if ret.flags & HyundaiFlags.CCNC:
+        ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CCNC.value
 
     else:
       # Shared configuration for non CAN-FD cars
@@ -121,6 +127,7 @@ class CarInterface(CarInterfaceBase):
 
     # Common longitudinal control setup
 
+    RADAR_START_ADDR = RADAR_START_ADDR_CANFD if ret.flags & HyundaiFlags.CANFD else RADAR_START_ADDR_CAN
     ret.radarUnavailable = RADAR_START_ADDR not in fingerprint[1] or Bus.radar not in DBC[ret.carFingerprint]
     ret.openpilotLongitudinalControl = alpha_long and ret.alphaLongitudinalAvailable
     ret.pcmCruise = not ret.openpilotLongitudinalControl
@@ -145,7 +152,8 @@ class CarInterface(CarInterfaceBase):
 
     # Dashcam cars are missing a test route, or otherwise need validation
     # TODO: Optima Hybrid 2017 uses a different SCC12 checksum
-    ret.dashcamOnly = candidate in {CAR.KIA_OPTIMA_H, }
+    if candidate in (CAR.KIA_OPTIMA_H,):
+      ret.dashcamOnly = True
 
     return ret
 
