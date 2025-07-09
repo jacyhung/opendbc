@@ -141,11 +141,11 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
 
   msg_161.update({
     "DAW_ICON": 0,
-    "LKA_ICON": 4 if lfa_icon else 4 if msg_1b5.get("LEFT_QUAL", 0) > 0 else 4 if msg_1b5.get("RIGHT_QUAL", 0) > 0 else 3,
+    "LKA_ICON": 4 if lfa_icon else 4 if msg_1b5.get("Info_LftLnQualSta", 0) > 0 else 4 if msg_1b5.get("Info_RtLnQualSta", 0) > 0 else 3,
     "LFA_ICON": 2 if lfa_icon else 0,
     "CENTERLINE": 1 if lfa_icon else 0,
-    "LANELINE_LEFT": (2 if msg_1b5.get("LEFT_QUAL", 0) > 0 else 4 if hud.leftLaneDepart else 0),
-    "LANELINE_RIGHT": (2 if msg_1b5.get("RIGHT_QUAL", 0) > 0 else 4 if hud.rightLaneDepart else 0),
+    "LANELINE_LEFT": (2 if msg_1b5.get("Info_LftLnQualSta", 0) > 0 else 4 if hud.leftLaneDepart else 0),
+    "LANELINE_RIGHT": (2 if msg_1b5.get("Info_RtLnQualSta", 0) > 0 else 4 if hud.rightLaneDepart else 0),
     "LCA_LEFT_ICON": (0 if not lfa_icon or out.vEgo < LANE_CHANGE_SPEED_MIN else 1 if out.leftBlindspot else 2 if leftBlinker or rightBlinker else 4),
     "LCA_RIGHT_ICON": (0 if not lfa_icon or out.vEgo < LANE_CHANGE_SPEED_MIN else 1 if out.rightBlindspot else 2 if leftBlinker or rightBlinker else 4),
     "LCA_LEFT_ARROW": 2 if leftBlinker else 0,
@@ -153,15 +153,15 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
   })
   
   #LANELINES
-  leftlaneraw, rightlaneraw = msg_1b5["LEFT_POSITION"], msg_1b5["RIGHT_POSITION"]
+  leftlaneraw, rightlaneraw = msg_1b5["Info_LftLnPosVal"], msg_1b5["Info_RtLnPosVal"]
 
   scale_per_m = 15 / 1.7
   leftlane = abs(int(round(15 + (leftlaneraw - 1.7) * scale_per_m)))
   rightlane = abs(int(round(15 + (rightlaneraw - 1.7) * scale_per_m)))
 
-  if msg_1b5["LEFT_QUAL"] not in (2, 3):
+  if msg_1b5["Info_LftLnQualSta"] not in (2, 3):
     leftlane = 0
-  if msg_1b5["RIGHT_QUAL"] not in (2, 3):
+  if msg_1b5["Info_RtLnQualSta"] not in (2, 3):
     rightlane = 0
 
   if leftlaneraw == -2.0248375:
@@ -187,10 +187,10 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
   msg_161["LANELINE_RIGHT_POSITION"] = rightlane
 
   #LANE CURVATURE
-  leftlanequal = msg_1b5["LEFT_QUAL"]
-  rightlanequal = msg_1b5["RIGHT_QUAL"]
-  leftlanecurvature = msg_1b5["LEFT_CURVATURE"]
-  rightlanecurvature = msg_1b5["RIGHT_CURVATURE"]
+  leftlanequal = msg_1b5["Info_LftLnQualSta"]
+  rightlanequal = msg_1b5["Info_RtLnQualSta"]
+  leftlanecurvature = msg_1b5["Info_LftLnCvtrVal"]
+  rightlanecurvature = msg_1b5["Info_RtLnCvtrVal"]
 
   if leftlanequal not in (2, 3):
     leftlanecurvature = 0
@@ -216,9 +216,9 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
 
   # LEAD
   if not enabled:
-    base_distance = msg_1b5.get("LEAD_DISTANCE", 2000)
+    base_distance = msg_1b5.get("Longitudinal_Distance", 2000)
 
-    if msg_1b5.get("LEAD", 0) > 0:
+    if msg_1b5.get("ID_CIPV", 0) > 0:
         lead_status = 2
         distance = max(0, min(base_distance, 2000))
     else:
@@ -259,7 +259,7 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     })
 
     msg_162["LEAD"] = 0 if not main_cruise_enabled else 2 if enabled else 1
-    msg_162["LEAD_DISTANCE"] = msg_1b5["LEAD_DISTANCE"]
+    msg_162["LEAD_DISTANCE"] = msg_1b5["Longitudinal_Distance"]
 
   return [packer.make_can_msg(msg, CAN.ECAN, data) for msg, data in [("CCNC_0x161", msg_161), ("CCNC_0x162", msg_162)]]
 
