@@ -151,23 +151,41 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     "LCA_RIGHT_ARROW": 2 if rightBlinker else 0,
   })
 
-  # LANELINES
+  # LANELINES with smoothing and improved fallback logic
+  alpha = 0.2  # smoothing factor
+  if not hasattr(create_ccnc, "_prev_leftlane"):
+    create_ccnc._prev_leftlane = 15
+    create_ccnc._prev_rightlane = 15
+
   leftlaneraw, rightlaneraw = msg_1b5["Info_LftLnPosVal"], msg_1b5["Info_RtLnPosVal"]
+  leftqual, rightqual = msg_1b5["Info_LftLnQualSta"], msg_1b5["Info_RtLnQualSta"]
 
   scale_per_m = 15 / 1.7
   leftlane = abs(int(round(15 + (leftlaneraw - 1.7) * scale_per_m)))
   rightlane = abs(int(round(15 + (rightlaneraw - 1.7) * scale_per_m)))
 
-  if msg_1b5["Info_LftLnQualSta"] not in (2, 3):
+  # Improved fallback logic
+  if leftqual not in (2, 3):
     leftlane = 0
-  if msg_1b5["Info_RtLnQualSta"] not in (2, 3):
+  if rightqual not in (2, 3):
     rightlane = 0
 
+  # Center lane only scenario: both qualities low, but at least one lane line is present
+  if leftqual not in (2, 3) and rightqual not in (2, 3):
+    if leftlaneraw != 0 or rightlaneraw != 0:
+      # Use previous smoothed values to avoid abrupt jumps
+      leftlane = create_ccnc._prev_leftlane
+      rightlane = create_ccnc._prev_rightlane
+    else:
+      leftlane = rightlane = 15
+
+  # Special raw value fallbacks
   if leftlaneraw == -2.0248375:
     leftlane = 30 - rightlane
   if rightlaneraw == 2.0248375:
     rightlane = 30 - leftlane
 
+  # If both are zero, center
   if leftlaneraw == rightlaneraw == 0:
     leftlane = rightlane = 15
   elif leftlaneraw == 0:
@@ -182,8 +200,15 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     leftlane = round((leftlane / total) * 30)
     rightlane = 30 - leftlane
 
-  msg_161["LANELINE_LEFT_POSITION"] = leftlane
-  msg_161["LANELINE_RIGHT_POSITION"] = rightlane
+  # Smoothing (low-pass filter)
+  smoothed_leftlane = int(round(alpha * leftlane + (1 - alpha) * create_ccnc._prev_leftlane))
+  smoothed_rightlane = int(round(alpha * rightlane + (1 - alpha) * create_ccnc._prev_rightlane))
+
+  create_ccnc._prev_leftlane = smoothed_leftlane
+  create_ccnc._prev_rightlane = smoothed_rightlane
+
+  msg_161["LANELINE_LEFT_POSITION"] = smoothed_leftlane
+  msg_161["LANELINE_RIGHT_POSITION"] = smoothed_rightlane
 
   #LANE CURVATURE
   leftlanequal = msg_1b5["Info_LftLnQualSta"]
