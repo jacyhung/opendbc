@@ -26,10 +26,10 @@ class CarControllerParams:
 
     if CP.flags & HyundaiFlags.CANFD:
       self.STEER_MAX = 384
-      self.STEER_DRIVER_ALLOWANCE = 250
+      self.STEER_DRIVER_ALLOWANCE = 300
       self.STEER_DRIVER_MULTIPLIER = 2
-      self.STEER_THRESHOLD = 250
-      self.STEER_DELTA_UP = 5
+      self.STEER_THRESHOLD = 300
+      self.STEER_DELTA_UP = 4
       self.STEER_DELTA_DOWN = 7
 
     # To determine the limit for your car, find the maximum value that the stock LKAS will request.
