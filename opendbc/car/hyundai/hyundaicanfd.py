@@ -151,39 +151,23 @@ def create_ccnc(packer, CP, CAN, openpilotLongitudinalControl, enabled, hud, lef
     "LCA_RIGHT_ARROW": 2 if rightBlinker else 0,
   })
 
-  # LANELINES with improved fallback, lane change animation, and center lane clamp
-  alpha = 0.3  # less smoothing for more responsive animation
-  if not hasattr(create_ccnc, "_prev_leftlane"):
-    create_ccnc._prev_leftlane = 15
-    create_ccnc._prev_rightlane = 15
-
+  # LANELINES
   leftlaneraw, rightlaneraw = msg_1b5["Info_LftLnPosVal"], msg_1b5["Info_RtLnPosVal"]
-  leftqual, rightqual = msg_1b5["Info_LftLnQualSta"], msg_1b5["Info_RtLnQualSta"]
 
   scale_per_m = 15 / 1.7
   leftlane = abs(int(round(15 + (leftlaneraw - 1.7) * scale_per_m)))
   rightlane = abs(int(round(15 + (rightlaneraw - 1.7) * scale_per_m)))
 
-  # Improved fallback logic: only freeze if both qualities are low and both raw values are zero
-  if leftqual not in (2, 3):
+  if msg_1b5["Info_LftLnQualSta"] not in (2, 3):
     leftlane = 0
-  if rightqual not in (2, 3):
+  if msg_1b5["Info_RtLnQualSta"] not in (2, 3):
     rightlane = 0
 
-  # Clamp: if only one lane is visible and its quality is low, set both to center
-  if (leftqual not in (2, 3) and rightqual in (2, 3)) or (rightqual not in (2, 3) and leftqual in (2, 3)):
-    leftlane = rightlane = 15
-
-  if leftqual not in (2, 3) and rightqual not in (2, 3) and leftlaneraw == 0 and rightlaneraw == 0:
-    leftlane = rightlane = 15
-
-  # Special raw value fallbacks
   if leftlaneraw == -2.0248375:
     leftlane = 30 - rightlane
   if rightlaneraw == 2.0248375:
     rightlane = 30 - leftlane
 
-  # If both are zero, center
   if leftlaneraw == rightlaneraw == 0:
     leftlane = rightlane = 15
   elif leftlaneraw == 0:
@@ -198,15 +182,21 @@ def create_ccnc(packer, CP, CAN, openpilotLongitudinalControl, enabled, hud, lef
     leftlane = round((leftlane / total) * 30)
     rightlane = 30 - leftlane
 
-  # Smoothing (low-pass filter)
-  smoothed_leftlane = int(round(alpha * leftlane + (1 - alpha) * create_ccnc._prev_leftlane))
-  smoothed_rightlane = int(round(alpha * rightlane + (1 - alpha) * create_ccnc._prev_rightlane))
+  # Smoothing for laneline positions
+  alpha_laneline = 0.2
+  if not hasattr(create_ccnc, "_prev_leftlane"):
+    create_ccnc._prev_leftlane = leftlane
+  if not hasattr(create_ccnc, "_prev_rightlane"):
+    create_ccnc._prev_rightlane = rightlane
 
-  create_ccnc._prev_leftlane = smoothed_leftlane
-  create_ccnc._prev_rightlane = smoothed_rightlane
+  leftlane = int(round(alpha_laneline * leftlane + (1 - alpha_laneline) * create_ccnc._prev_leftlane))
+  rightlane = int(round(alpha_laneline * rightlane + (1 - alpha_laneline) * create_ccnc._prev_rightlane))
 
-  msg_161["LANELINE_LEFT_POSITION"] = smoothed_leftlane
-  msg_161["LANELINE_RIGHT_POSITION"] = smoothed_rightlane
+  create_ccnc._prev_leftlane = leftlane
+  create_ccnc._prev_rightlane = rightlane
+
+  msg_161["LANELINE_LEFT_POSITION"] = leftlane
+  msg_161["LANELINE_RIGHT_POSITION"] = rightlane
 
   #LANE CURVATURE with smoothing
   alpha_curve = 0.2  # smoothing factor for curvature
