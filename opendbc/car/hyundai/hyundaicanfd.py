@@ -124,7 +124,7 @@ def create_lfahda_cluster(packer, CAN, enabled):
   }
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
-def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBlinker, rightBlinker, msg_161, msg_162, msg_1b5, is_metric, out):
+def create_ccnc(packer, CP, CAN, openpilotLongitudinalControl, enabled, hud, leftBlinker, rightBlinker, msg_161, msg_162, msg_1b5, is_metric, out):
   for f in {"FAULT_LSS", "FAULT_HDA", "FAULT_DAS", "FAULT_LFA", "FAULT_DAW", "FAULT_ESS"}:
     msg_162[f] = 0
   if msg_161["ALERTS_2"] == 5:
@@ -151,8 +151,8 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     "LCA_RIGHT_ARROW": 2 if rightBlinker else 0,
   })
 
-  # LANELINES with smoothing and improved fallback logic
-  alpha = 0.2  # smoothing factor
+  # LANELINES with improved fallback, lane change animation, and center lane clamp
+  alpha = 0.3  # less smoothing for more responsive animation
   if not hasattr(create_ccnc, "_prev_leftlane"):
     create_ccnc._prev_leftlane = 15
     create_ccnc._prev_rightlane = 15
@@ -164,20 +164,18 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
   leftlane = abs(int(round(15 + (leftlaneraw - 1.7) * scale_per_m)))
   rightlane = abs(int(round(15 + (rightlaneraw - 1.7) * scale_per_m)))
 
-  # Improved fallback logic
+  # Improved fallback logic: only freeze if both qualities are low and both raw values are zero
   if leftqual not in (2, 3):
     leftlane = 0
   if rightqual not in (2, 3):
     rightlane = 0
 
-  # Center lane only scenario: both qualities low, but at least one lane line is present
-  if leftqual not in (2, 3) and rightqual not in (2, 3):
-    if leftlaneraw != 0 or rightlaneraw != 0:
-      # Use previous smoothed values to avoid abrupt jumps
-      leftlane = create_ccnc._prev_leftlane
-      rightlane = create_ccnc._prev_rightlane
-    else:
-      leftlane = rightlane = 15
+  # Clamp: if only one lane is visible and its quality is low, set both to center
+  if (leftqual not in (2, 3) and rightqual in (2, 3)) or (rightqual not in (2, 3) and leftqual in (2, 3)):
+    leftlane = rightlane = 15
+
+  if leftqual not in (2, 3) and rightqual not in (2, 3) and leftlaneraw == 0 and rightlaneraw == 0:
+    leftlane = rightlane = 15
 
   # Special raw value fallbacks
   if leftlaneraw == -2.0248375:
