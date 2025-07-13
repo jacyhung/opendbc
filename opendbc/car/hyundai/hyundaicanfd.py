@@ -208,7 +208,11 @@ def create_ccnc(packer, CP, CAN, openpilotLongitudinalControl, enabled, hud, lef
   msg_161["LANELINE_LEFT_POSITION"] = smoothed_leftlane
   msg_161["LANELINE_RIGHT_POSITION"] = smoothed_rightlane
 
-  #LANE CURVATURE
+  #LANE CURVATURE with smoothing
+  alpha_curve = 0.2  # smoothing factor for curvature
+  if not hasattr(create_ccnc, "_prev_curvature"):
+    create_ccnc._prev_curvature = 0
+
   leftlanequal = msg_1b5["Info_LftLnQualSta"]
   rightlanequal = msg_1b5["Info_RtLnQualSta"]
   leftlanecurvature = msg_1b5["Info_LftLnCvtrVal"]
@@ -229,12 +233,17 @@ def create_ccnc(packer, CP, CAN, openpilotLongitudinalControl, enabled, hud, lef
     curvature = (leftlanecurvature + rightlanecurvature) / 2
 
   curvature = -curvature * 6
-  clipped_curvature = max(0, min(0.032767, abs(curvature)))
+
+  # Smoothing for curvature
+  smoothed_curvature = alpha_curve * curvature + (1 - alpha_curve) * create_ccnc._prev_curvature
+  create_ccnc._prev_curvature = smoothed_curvature
+
+  clipped_curvature = max(0, min(0.032767, abs(smoothed_curvature)))
   scaled_curvature = round((clipped_curvature / 0.032767) * 15)
-  value = max(0, min(scaled_curvature, 15) + (-1 if curvature < 0 else 0))
+  value = max(0, min(scaled_curvature, 15) + (-1 if smoothed_curvature < 0 else 0))
 
   msg_161["LANELINE_CURVATURE"] = value
-  msg_161["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 else 0
+  msg_161["LANELINE_CURVATURE_DIRECTION"] = 1 if smoothed_curvature < 0 else 0
 
   # LEAD
   if not enabled:
