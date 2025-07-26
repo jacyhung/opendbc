@@ -1,11 +1,7 @@
 import copy
 import numpy as np
 from opendbc.car import CanBusBase
-<<<<<<< HEAD
-from opendbc.car.common.conversions import Conversions as CV
-=======
 from opendbc.car.crc import CRC16_XMODEM
->>>>>>> origin/master
 from opendbc.car.hyundai.values import HyundaiFlags
 
 

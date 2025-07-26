@@ -306,35 +306,6 @@ class CarState(CarStateBase):
       msgs += [
         ("CRUISE_BUTTONS", 50)
       ]
-<<<<<<< HEAD
-
-    if CP.enableBsm:
-      pt_messages += [
-        ("BLINDSPOTS_REAR_CORNERS", 20),
-      ]
-
-    if not (CP.flags & HyundaiFlags.CANFD_CAMERA_SCC.value) and not CP.openpilotLongitudinalControl:
-      pt_messages += [
-        ("SCC_CONTROL", 50),
-      ]
-
-    cam_messages = []
-    if CP.flags & HyundaiFlags.CANFD_LKA_STEERING:
-      block_lfa_msg = "CAM_0x362" if CP.flags & HyundaiFlags.CANFD_LKA_STEERING_ALT else "CAM_0x2a4"
-      cam_messages += [(block_lfa_msg, 20)]
-    elif CP.flags & HyundaiFlags.CANFD_CAMERA_SCC:
-      cam_messages += [
-        ("SCC_CONTROL", 50),
-      ]
-    if self.CP.flags & HyundaiFlags.CCNC and not self.CP.flags & HyundaiFlags.CANFD_LKA_STEERING:
-      cam_messages += [
-        ("CCNC_0x161", 20),
-        ("CCNC_0x162", 20),
-        ("FR_CMR_03_50ms", 20),
-      ]
-
-=======
->>>>>>> origin/master
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).CAM),
