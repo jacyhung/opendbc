@@ -3,7 +3,7 @@ from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, \
                                                    CANFD_UNSUPPORTED_LONGITUDINAL_CAR, \
                                                    UNSUPPORTED_LONGITUDINAL_CAR, HyundaiSafetyFlags
-from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR_CAN, RADAR_START_ADDR_CANFD
+from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR
 from opendbc.car.interfaces import CarInterfaceBase
 from opendbc.car.disable_ecu import disable_ecu
 from opendbc.car.hyundai.carcontroller import CarController
@@ -112,7 +112,7 @@ class CarInterface(CarInterfaceBase):
     # Common lateral control setup
 
     ret.centerToFront = ret.wheelbase * 0.4
-    ret.steerActuatorDelay = 0.35
+    ret.steerActuatorDelay = 0.1
     ret.steerLimitTimer = 0.4
     CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
@@ -127,7 +127,6 @@ class CarInterface(CarInterfaceBase):
 
     # Common longitudinal control setup
 
-    RADAR_START_ADDR = RADAR_START_ADDR_CANFD if ret.flags & HyundaiFlags.CANFD else RADAR_START_ADDR_CAN
     ret.radarUnavailable = RADAR_START_ADDR not in fingerprint[1] or Bus.radar not in DBC[ret.carFingerprint]
     ret.openpilotLongitudinalControl = alpha_long and ret.alphaLongitudinalAvailable
     ret.pcmCruise = not ret.openpilotLongitudinalControl
@@ -135,7 +134,6 @@ class CarInterface(CarInterfaceBase):
     ret.vEgoStarting = 0.1
     ret.startAccel = 1.0
     ret.longitudinalActuatorDelay = 0.5
-    ret.steerAtStandstill = True
 
     if ret.openpilotLongitudinalControl:
       ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.LONG.value
