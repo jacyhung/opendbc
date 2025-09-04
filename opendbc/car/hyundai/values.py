@@ -2,6 +2,8 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
 
+import numpy as np
+
 from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, uds
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.structs import CarParams
@@ -25,12 +27,17 @@ class CarControllerParams:
     self.STEER_STEP = 1  # 100 Hz
 
     if CP.flags & HyundaiFlags.CANFD:
-      self.STEER_MAX = 384
+      self.DYNAMIC_MAX_TORQUE = True
       self.STEER_DRIVER_ALLOWANCE = 300
       self.STEER_DRIVER_MULTIPLIER = 2
       self.STEER_THRESHOLD = 300
+      self.STEER_MAX = 384
+      self.STEER_MAX_LOOKUP = [9, 16, 20], [384, 350, 330]
       self.STEER_DELTA_UP = 7
+      self.STEER_DELTA_UP_LOOKUP = [9, 16, 20], [10, 7, 6]
       self.STEER_DELTA_DOWN = 8
+      self.STEER_DELTA_DOWN_LOOKUP = [9, 16, 20], [10, 8, 7]
+
 
     # To determine the limit for your car, find the maximum value that the stock LKAS will request.
     # If the max stock LKAS request is <384, add your car to this list.
@@ -53,6 +60,11 @@ class CarControllerParams:
     # Default for most HKG
     else:
       self.STEER_MAX = 384
+
+  def update_dynamic_torque(self, vEgoRaw):
+    self.STEER_MAX = round(float(np.interp(vEgoRaw, self.STEER_MAX_LOOKUP[0], self.STEER_MAX_LOOKUP[1])))
+    self.STEER_DELTA_UP = round(float(np.interp(vEgoRaw, self.STEER_DELTA_UP_LOOKUP[0], self.STEER_DELTA_UP_LOOKUP[1])))
+    self.STEER_DELTA_DOWN = round(float(np.interp(vEgoRaw, self.STEER_DELTA_DOWN_LOOKUP[0], self.STEER_DELTA_DOWN_LOOKUP[1])))
 
 
 class HyundaiSafetyFlags(IntFlag):
