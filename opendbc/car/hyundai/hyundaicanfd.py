@@ -149,7 +149,8 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
 
   msg_161.update({
     "DAW_ICON": 0,
-    "LKA_ICON": 4 if enabled else 4 if msg_1b5.get("Info_LftLnQualSta", 0) > 0 else 4 if msg_1b5.get("Info_RtLnQualSta", 0) > 0 else 3,    "LFA_ICON": 2 if lfa_icon else 0,
+    "LKA_ICON": 4 if enabled else 4 if msg_1b5.get("Info_LftLnQualSta", 0) > 0 else 4 if msg_1b5.get("Info_RtLnQualSta", 0) > 0 else 3,
+    "LFA_ICON": 2 if lfa_icon else 0,
     "CENTERLINE": 1 if lfa_icon else 0,
     "LANELINE_LEFT": (0 if not lfa_icon else 1 if not hud.leftLaneVisible else 4 if hud.leftLaneDepart else 6 if leftBlinker or rightBlinker else 2),
     "LANELINE_RIGHT": (0 if not lfa_icon else 1 if not hud.rightLaneVisible else 4 if hud.rightLaneDepart else 6 if leftBlinker or rightBlinker else 2),
