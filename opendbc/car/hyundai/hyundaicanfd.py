@@ -149,8 +149,7 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
 
   msg_161.update({
     "DAW_ICON": 0,
-    "LKA_ICON": 0,
-    "LFA_ICON": 2 if lfa_icon else 0,
+    "LKA_ICON": 4 if enabled else 4 if msg_1b5.get("Info_LftLnQualSta", 0) > 0 else 4 if msg_1b5.get("Info_RtLnQualSta", 0) > 0 else 3,    "LFA_ICON": 2 if lfa_icon else 0,
     "CENTERLINE": 1 if lfa_icon else 0,
     "LANELINE_LEFT": (0 if not lfa_icon else 1 if not hud.leftLaneVisible else 4 if hud.leftLaneDepart else 6 if leftBlinker or rightBlinker else 2),
     "LANELINE_RIGHT": (0 if not lfa_icon else 1 if not hud.rightLaneVisible else 4 if hud.rightLaneDepart else 6 if leftBlinker or rightBlinker else 2),
@@ -160,39 +159,93 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     "LCA_RIGHT_ARROW": 2 if rightBlinker else 0,
   })
 
-  if lfa_icon and (leftBlinker or rightBlinker):
-    leftlaneraw, rightlaneraw = msg_1b5["Info_LftLnPosVal"], msg_1b5["Info_RtLnPosVal"]
+# lanelines
+  leftlaneraw, rightlaneraw = msg_1b5["Info_LftLnPosVal"], msg_1b5["Info_RtLnPosVal"]
 
-    scale_per_m = 15 / 1.7
-    leftlane = abs(int(round(15 + (leftlaneraw - 1.7) * scale_per_m)))
-    rightlane = abs(int(round(15 + (rightlaneraw - 1.7) * scale_per_m)))
+  scale_per_m = 15 / 1.7
+  leftlane = abs(int(round(15 + (leftlaneraw - 1.7) * scale_per_m)))
+  rightlane = abs(int(round(15 + (rightlaneraw - 1.7) * scale_per_m)))
 
-    if msg_1b5["Info_LftLnQualSta"] not in (2, 3):
-      leftlane = 0
-    if msg_1b5["Info_RtLnQualSta"] not in (2, 3):
-      rightlane = 0
+  if msg_1b5["Info_LftLnQualSta"] not in (2, 3):
+    leftlane = 0
+  if msg_1b5["Info_RtLnQualSta"] not in (2, 3):
+    rightlane = 0
 
-    if leftlaneraw == -2.0248375:
-      leftlane = 30 - rightlane
-    if rightlaneraw == 2.0248375:
-      rightlane = 30 - leftlane
+  if leftlaneraw == -2.0248375:
+    leftlane = 30 - rightlane
+  if rightlaneraw == 2.0248375:
+    rightlane = 30 - leftlane
 
-    if leftlaneraw == rightlaneraw == 0:
-      leftlane = rightlane = 15
-    elif leftlaneraw == 0:
-      leftlane = 30 - rightlane
-    elif rightlaneraw == 0:
-      rightlane = 30 - leftlane
+  if leftlaneraw == rightlaneraw == 0:
+    leftlane = rightlane = 15
+  elif leftlaneraw == 0:
+    leftlane = 30 - rightlane
+  elif rightlaneraw == 0:
+    rightlane = 30 - leftlane
 
-    total = leftlane + rightlane
-    if total == 0:
-      leftlane = rightlane = 15
+  total = leftlane + rightlane
+  if total == 0:
+    leftlane = rightlane = 15
+  else:
+    leftlane = round((leftlane / total) * 30)
+    rightlane = 30 - leftlane
+
+  msg_161["LANELINE_LEFT_POSITION"] = leftlane
+  msg_161["LANELINE_RIGHT_POSITION"] = rightlane
+
+#LANE CURVATURE with smoothing
+  alpha_curve = 0.2  # smoothing factor for curvature
+  if not hasattr(create_ccnc, "_prev_curvature"):
+    create_ccnc._prev_curvature = 0
+
+  leftlanequal = msg_1b5["Info_LftLnQualSta"]
+  rightlanequal = msg_1b5["Info_RtLnQualSta"]
+  leftlanecurvature = msg_1b5["Info_LftLnCvtrVal"]
+  rightlanecurvature = msg_1b5["Info_RtLnCvtrVal"]
+
+  if leftlanequal not in (2, 3):
+    leftlanecurvature = 0
+  if rightlanequal not in (2, 3):
+    rightlanecurvature = 0
+
+  if leftlanecurvature == rightlanecurvature == 0:
+    curvature = 0
+  elif leftlanecurvature == 0:
+    curvature = rightlanecurvature
+  elif rightlanecurvature == 0:
+    curvature = leftlanecurvature
+  else:
+    curvature = (leftlanecurvature + rightlanecurvature) / 2
+
+  curvature = -curvature * 6
+
+  # Smoothing for curvature
+  smoothed_curvature = alpha_curve * curvature + (1 - alpha_curve) * create_ccnc._prev_curvature
+  create_ccnc._prev_curvature = smoothed_curvature
+
+  clipped_curvature = max(0, min(0.032767, abs(smoothed_curvature)))
+  scaled_curvature = round((clipped_curvature / 0.032767) * 15)
+  value = max(0, min(scaled_curvature, 15) + (-1 if smoothed_curvature < 0 else 0))
+
+  msg_161["LANELINE_CURVATURE"] = value
+  msg_161["LANELINE_CURVATURE_DIRECTION"] = 1 if smoothed_curvature < 0 else 0
+
+  # LEAD
+  if not enabled:
+    base_distance = msg_1b5.get("Longitudinal_Distance", 2000)
+
+    if msg_1b5.get("ID_CIPV", 0) > 0:
+        lead_status = 2
+        distance = max(0, min(base_distance, 2000))
     else:
-      leftlane = round((leftlane / total) * 30)
-      rightlane = 30 - leftlane
+        # No lead detected
+        lead_status = 0
+        distance = 2000
 
-    msg_161["LANELINE_LEFT_POSITION"] = leftlane
-    msg_161["LANELINE_RIGHT_POSITION"] = rightlane
+    msg_162.update({
+        "LEAD": lead_status,
+        "LEAD_DISTANCE": distance
+    })
 
   if hud.leftLaneDepart or hud.rightLaneDepart:
     msg_162["VIBRATE"] = 1

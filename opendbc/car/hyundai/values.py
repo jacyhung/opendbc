@@ -31,20 +31,20 @@ class CarControllerParams:
 
     if CP.flags & HyundaiFlags.CANFD:
       self.STEER_MAX = 270
-      self.STEER_DRIVER_ALLOWANCE = 250
+      self.STEER_DRIVER_ALLOWANCE = 300
       self.STEER_DRIVER_MULTIPLIER = 2
-      self.STEER_THRESHOLD = 250
+      self.STEER_THRESHOLD = 300
       self.STEER_DELTA_UP = 2
       self.STEER_DELTA_DOWN = 3
 
       if CP.carFingerprint in (CAR.HYUNDAI_SONATA_HEV_2024):
-        self.STEER_MAX = 350
+        self.STEER_MAX = 384
         self.DYNAMIC_MAX_TORQUE = True
-        self.STEER_MAX_LOOKUP = [9, 16, 20], [384, 350, 330]
-        self.STEER_DELTA_UP = 4
-        self.STEER_DELTA_UP_LOOKUP = [9, 16, 20], [7, 5, 4]
-        self.STEER_DELTA_DOWN = 5
-        self.STEER_DELTA_DOWN_LOOKUP = [9, 16, 20], [7, 5, 5]
+        self.STEER_MAX_LOOKUP = [13.5, 16, 20], [384, 384, 330]
+        self.STEER_DELTA_UP = 7
+        self.STEER_DELTA_UP_LOOKUP = [13.5, 16, 20], [10, 7, 6]
+        self.STEER_DELTA_DOWN = 8
+        self.STEER_DELTA_DOWN_LOOKUP = [13.5, 16, 20], [10, 8, 7]
 
     # To determine the limit for your car, find the maximum value that the stock LKAS will request.
     # If the max stock LKAS request is <384, add your car to this list.
