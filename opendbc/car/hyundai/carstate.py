@@ -73,6 +73,10 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     # Adjacent lane radar tracking
     self.left_lane_lead = None
     self.right_lane_lead = None
+    
+    # Lane thresholds for adjacent lane detection
+    self.LANE_BOUNDARY = 1.8
+    self.MAX_LATERAL = 5.5
 
     self.params = CarControllerParams(CP)
 
@@ -81,6 +85,33 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     if hasattr(radar_interface, 'left_lane_lead'):
       self.left_lane_lead = radar_interface.left_lane_lead
       self.right_lane_lead = radar_interface.right_lane_lead
+  
+  def update_adjacent_lanes_from_live_tracks(self, live_tracks):
+    """
+    Update adjacent lane leads from liveTracks message (published by radard).
+    This is called from openpilot's control loop with sm['liveTracks'].
+    """
+    if not live_tracks or not hasattr(live_tracks, 'points'):
+      return
+    
+    # Filter valid tracks by lane
+    left_lane = []
+    right_lane = []
+    
+    for pt in live_tracks.points:
+      if not pt.measured:
+        continue
+      
+      # Left lane: tracks beyond left boundary but not too far
+      if -self.MAX_LATERAL < pt.yRel < -self.LANE_BOUNDARY:
+        left_lane.append(pt)
+      # Right lane: tracks beyond right boundary but not too far
+      elif self.LANE_BOUNDARY < pt.yRel < self.MAX_LATERAL:
+        right_lane.append(pt)
+    
+    # Find closest in each lane
+    self.left_lane_lead = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
+    self.right_lane_lead = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
 
   def recent_button_interaction(self) -> bool:
     # On some newer model years, the CANCEL button acts as a pause/resume button based on the PCM state

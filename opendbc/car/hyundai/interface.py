@@ -29,19 +29,9 @@ class CarInterface(CarInterfaceBase):
   def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
     super().__init__(CP, CP_SP)
     
-    # Create and link radar interface for adjacent lane tracking
-    if not CP.radarUnavailable:
-      try:
-        self.rk = self.RadarInterface(CP, CP_SP)
-        # Link to controller for adjacent lane data (CC is created in parent __init__)
-        self.CC.radar_interface = self.rk
-        print(f"[INIT] Radar interface linked to controller: {self.rk is not None}")
-      except Exception as e:
-        print(f"[INIT] Failed to create radar interface: {e}")
-        self.rk = None
-    else:
-      self.rk = None
-      print("[INIT] Radar unavailable, not creating radar interface")
+    # Radar interface will be set externally by openpilot
+    # We don't create it here because radard creates its own instance
+    self.rk = None
   
   def set_radar_interface(self, radar_interface):
     """Set radar interface reference for adjacent lane tracking (for external use)."""
