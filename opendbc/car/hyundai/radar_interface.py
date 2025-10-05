@@ -161,14 +161,15 @@ class RadarInterface(RadarInterfaceBase, RadarInterfaceExt):
     # Lane boundary threshold - distance from vehicle center to lane edge
     # This assumes ~3.6m lane width (typical for highways)
     LANE_BOUNDARY = 1.8  # meters
+    MAX_LATERAL = 5.5  # Maximum lateral distance to consider (filters out barriers, signs, etc.)
     
-    # Filter valid tracks by lane
+    # Filter valid tracks by lane with realistic lateral distances
     # Center lane: tracks within ±LANE_BOUNDARY
     center_lane = [pt for pt in radar_points if pt.measured and abs(pt.yRel) <= LANE_BOUNDARY]
-    # Left lane: tracks beyond left boundary
-    left_lane = [pt for pt in radar_points if pt.measured and pt.yRel < -LANE_BOUNDARY]
-    # Right lane: tracks beyond right boundary  
-    right_lane = [pt for pt in radar_points if pt.measured and pt.yRel > LANE_BOUNDARY]
+    # Left lane: tracks beyond left boundary but not too far (realistic adjacent lane)
+    left_lane = [pt for pt in radar_points if pt.measured and -MAX_LATERAL < pt.yRel < -LANE_BOUNDARY]
+    # Right lane: tracks beyond right boundary but not too far (realistic adjacent lane)
+    right_lane = [pt for pt in radar_points if pt.measured and LANE_BOUNDARY < pt.yRel < MAX_LATERAL]
     
     # Find closest in each lane
     self.left_lane_lead = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
@@ -186,13 +187,15 @@ class RadarInterface(RadarInterfaceBase, RadarInterfaceExt):
     sorted_tracks = sorted(all_tracks, key=lambda pt: pt.dRel)
     
     for pt in sorted_tracks:
-      # Determine which lane this track is in
+      # Determine which lane this track is in (with filtering)
       if abs(pt.yRel) <= 1.8:
         lane = "CENTER"
-      elif pt.yRel < -1.8:
+      elif -5.5 < pt.yRel < -1.8:
         lane = "LEFT  "
-      else:
+      elif 1.8 < pt.yRel < 5.5:
         lane = "RIGHT "
+      else:
+        lane = "IGNORE"  # Too far lateral - likely barrier/sign
       
       # Mark if this is the selected lead for that lane
       marker = ""

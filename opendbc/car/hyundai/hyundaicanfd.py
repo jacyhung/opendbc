@@ -272,31 +272,37 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
 
   # Adjacent lane leads (left and right)
   if left_lane_lead is not None:
+    left_dist = min(int(left_lane_lead.dRel * 10), 2047)
     msg_162.update({
       "LEAD_LEFT": 2,
-      "LEAD_LEFT_DISTANCE": min(int(left_lane_lead.dRel * 10), 2047),
+      "LEAD_LEFT_DISTANCE": left_dist,
       "LEAD_LEFT_LATERAL": 80,
     })
+    print(f"[CCNC] LEFT LEAD: icon=2, dist={left_dist} (raw={left_lane_lead.dRel:.1f}m), lat=80")
   else:
     msg_162.update({
       "LEAD_LEFT": 0,  # HIDDEN
       "LEAD_LEFT_DISTANCE": 0,
       "LEAD_LEFT_LATERAL": 0,
     })
+    print(f"[CCNC] LEFT LEAD: HIDDEN")
   
   # Right lane lead
   if right_lane_lead is not None:
+    right_dist = min(int(right_lane_lead.dRel * 10), 2047)
     msg_162.update({
       "LEAD_RIGHT": 2, 
-      "LEAD_RIGHT_DISTANCE": min(int(right_lane_lead.dRel * 10), 2047),
+      "LEAD_RIGHT_DISTANCE": right_dist,
       "LEAD_RIGHT_LATERAL": 80,
     })
+    print(f"[CCNC] RIGHT LEAD: icon=2, dist={right_dist} (raw={right_lane_lead.dRel:.1f}m), lat=80")
   else:
     msg_162.update({
       "LEAD_RIGHT": 0,  # HIDDEN
       "LEAD_RIGHT_DISTANCE": 0,
       "LEAD_RIGHT_LATERAL": 0,
     })
+    print(f"[CCNC] RIGHT LEAD: HIDDEN")
 
   return [packer.make_can_msg(msg, CAN.ECAN, data) for msg, data in [("CCNC_0x161", msg_161), ("CCNC_0x162", msg_162)]]
 
