@@ -301,15 +301,38 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
       "LEAD_RIGHT_LATERAL": 0,
     })
   
-  # REAR signals - disabled for now
-  msg_162.update({
-    "LEAD_LEFT_REAR_STATUS": 1,
-    "LEAD_LEFT_REAR_DISTANCE": 25,
-    "LEAD_LEFT_REAR_LATERAL": 80,
-    "LEAD_RIGHT_REAR_STATUS": 0,
-    "LEAD_RIGHT_REAR_DISTANCE": 0,
-    "LEAD_RIGHT_REAR_LATERAL": 0,
-  })
+  # REAR signals - blind spot area (0-10m beside/behind vehicle)
+  # Distance range: 1-10 in 0.1m units (10-100 raw value)
+  # 1 = closest to car, 10 = further back on the side
+  if left_lane_lead_rear is not None:
+    # Clamp to 1-10m range and convert to 0.1m units
+    left_rear_dist = max(10, min(int(left_lane_lead_rear.dRel * 10), 100))
+    msg_162.update({
+      "LEAD_LEFT_REAR_STATUS": 2,  # Same icon as front
+      "LEAD_LEFT_REAR_DISTANCE": left_rear_dist,
+      "LEAD_LEFT_REAR_LATERAL": 80,  # Fixed lateral position
+    })
+  else:
+    msg_162.update({
+      "LEAD_LEFT_REAR_STATUS": 0,
+      "LEAD_LEFT_REAR_DISTANCE": 0,
+      "LEAD_LEFT_REAR_LATERAL": 0,
+    })
+  
+  if right_lane_lead_rear is not None:
+    # Clamp to 1-10m range and convert to 0.1m units
+    right_rear_dist = max(10, min(int(right_lane_lead_rear.dRel * 10), 100))
+    msg_162.update({
+      "LEAD_RIGHT_REAR_STATUS": 2,  # Same icon as front
+      "LEAD_RIGHT_REAR_DISTANCE": right_rear_dist,
+      "LEAD_RIGHT_REAR_LATERAL": 80,  # Fixed lateral position
+    })
+  else:
+    msg_162.update({
+      "LEAD_RIGHT_REAR_STATUS": 0,
+      "LEAD_RIGHT_REAR_DISTANCE": 0,
+      "LEAD_RIGHT_REAR_LATERAL": 0,
+    })
 
   return [packer.make_can_msg(msg, CAN.ECAN, data) for msg, data in [("CCNC_0x161", msg_161), ("CCNC_0x162", msg_162)]]
 

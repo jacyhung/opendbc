@@ -79,7 +79,8 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     # Lane thresholds for adjacent lane detection
     self.LANE_BOUNDARY = 1.8
     self.MAX_LATERAL = 5.5
-    self.REAR_DISTANCE_THRESHOLD = 10.0  # meters - vehicles closer than this are "rear"
+    # REAR signals are for blind spot area: vehicles beside/behind you (negative dRel or very close)
+    self.REAR_DISTANCE_MAX = 10.0  # meters - max distance for REAR signals (1-10m range)
     self.MIN_RELATIVE_VELOCITY = -30.0  # m/s - minimum relative velocity to consider (filters stationary objects)
 
     self.params = CarControllerParams(CP)
@@ -112,15 +113,29 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         continue
       
       # Filter out stationary objects (walls, barriers, signs)
-      # Strategy:
-      # - If we're moving (v_ego > 1 m/s): Filter objects with vRel ≈ 0 (stationary barriers)
-      # - If we're stopped (v_ego < 1 m/s): Keep all objects (stopped cars next to us are valid)
+      # Strategy 1: If we're moving, filter stationary objects
       if v_ego > 1.0:  # We're moving
         # Filter out stationary objects (walls/barriers)
         # Real vehicles will have vRel < -1.0 (approaching) or similar to our speed
         if pt.vRel > -1.0:  # Nearly stationary - likely a wall/barrier
           continue
-      # else: We're stopped, keep all tracks (including stopped cars)
+      
+      # Strategy 2: Even when stopped, filter out objects that are too far or too close
+      # Real adjacent lane vehicles should be roughly parallel to you (similar distance range)
+      # Filter out very close objects (< 3m) - likely your own car reflection or very close barriers
+      if pt.dRel < 3.0:
+        continue
+      
+      # Strategy 3: When stopped, only show vehicles very close to you (likely real cars)
+      # Ignore distant objects when parked - they're probably barriers
+      if v_ego < 0.5:  # Completely stopped
+        if pt.dRel > 15.0:  # Ignore objects >15m away when parked
+          continue
+      
+      # Strategy 4: Filter objects with extreme lateral positions (likely barriers/signs)
+      # Already handled by MAX_LATERAL, but add extra check for very far objects
+      if abs(pt.yRel) > self.MAX_LATERAL:
+        continue
       
       # Left lane: tracks beyond left boundary but not too far
       if -self.MAX_LATERAL < pt.yRel < -self.LANE_BOUNDARY:
@@ -129,15 +144,19 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       elif self.LANE_BOUNDARY < pt.yRel < self.MAX_LATERAL:
         right_lane.append(pt)
     
-    # Find closest vehicle in each lane (simplest approach)
-    # Just show the most relevant (closest) vehicle
-    self.left_lane_lead = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
-    self.right_lane_lead = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
+    # Split vehicles into FRONT (ahead) and REAR (blind spot/beside)
+    # REAR: vehicles within 0-10m (blind spot area, beside/slightly behind)
+    # FRONT: vehicles beyond 10m (ahead in adjacent lane)
+    left_rear = [pt for pt in left_lane if 0 <= pt.dRel <= self.REAR_DISTANCE_MAX]
+    left_front = [pt for pt in left_lane if pt.dRel > self.REAR_DISTANCE_MAX]
+    right_rear = [pt for pt in right_lane if 0 <= pt.dRel <= self.REAR_DISTANCE_MAX]
+    right_front = [pt for pt in right_lane if pt.dRel > self.REAR_DISTANCE_MAX]
     
-    # For now, don't use REAR signals (they seem to cause confusion)
-    # Can re-enable later if we understand their purpose better
-    self.left_lane_lead_rear = None
-    self.right_lane_lead_rear = None
+    # Find closest in each category
+    self.left_lane_lead = min(left_front, key=lambda pt: pt.dRel) if left_front else None
+    self.left_lane_lead_rear = min(left_rear, key=lambda pt: pt.dRel) if left_rear else None
+    self.right_lane_lead = min(right_front, key=lambda pt: pt.dRel) if right_front else None
+    self.right_lane_lead_rear = min(right_rear, key=lambda pt: pt.dRel) if right_rear else None
     
     # Minimal debug output (only when leads change)
     # Uncomment for debugging:
