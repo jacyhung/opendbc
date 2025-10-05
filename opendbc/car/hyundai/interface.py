@@ -33,13 +33,15 @@ class CarInterface(CarInterfaceBase):
     if not CP.radarUnavailable:
       try:
         self.rk = self.RadarInterface(CP, CP_SP)
-        # Link to controller for adjacent lane data
-        if hasattr(self, 'CC') and self.CC:
-          self.CC.radar_interface = self.rk
-      except Exception:
+        # Link to controller for adjacent lane data (CC is created in parent __init__)
+        self.CC.radar_interface = self.rk
+        print(f"[INIT] Radar interface linked to controller: {self.rk is not None}")
+      except Exception as e:
+        print(f"[INIT] Failed to create radar interface: {e}")
         self.rk = None
     else:
       self.rk = None
+      print("[INIT] Radar unavailable, not creating radar interface")
   
   def set_radar_interface(self, radar_interface):
     """Set radar interface reference for adjacent lane tracking (for external use)."""
