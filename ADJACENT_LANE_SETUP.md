@@ -4,35 +4,40 @@
 
 All the code for adjacent lane tracking is in opendbc. You need **ONE line** in openpilot/sunnypilot to connect it.
 
-## 🔌 Integration (Two Changes Required)
+## 🔌 Integration (Changes in card.py)
 
-In your **openpilot/sunnypilot** `selfdrive/controls/controlsd.py`:
+In your **openpilot/sunnypilot** `selfdrive/car/card.py`:
 
 ### Change 1: Add 'liveTracks' to SubMaster (in `__init__`)
 
-Around line 44, add `'liveTracks'` to the list:
+Around line 100, add `'liveTracks'` to the SubMaster list:
 ```python
-self.sm = messaging.SubMaster(['liveParameters', 'liveTorqueParameters', 'modelV2', 'selfdriveState',
-                               'liveCalibration', 'livePose', 'longitudinalPlan', 'carState', 'carOutput',
-                               'driverMonitoringState', 'onroadEvents', 'driverAssistance', 'liveDelay', 'liveTracks'] + self.sm_services_ext,
-                              poll='selfdriveState')
+self.sm = messaging.SubMaster(['pandaStates', 'carControl', 'carControlSP', 'onroadEvents', 'longitudinalPlanSP', 'liveTracks'], ignore_avg_freq=['pandaStates'])
 ```
 
-### Change 2: Update adjacent lanes in CarInterface
+### Change 2: Update adjacent lanes in `state_update()`
 
-Find the `state_control()` method (around line 85) and add at the **very beginning**:
+Find the `state_update()` method (around line 193) and add AFTER creating CS:
 
 ```python
-def state_control(self):
-    # Update adjacent lane tracking from radar data
-    if self.sm.valid['liveTracks']:
-        self.CI.update_live_tracks(self.sm['liveTracks'])
+def state_update(self) -> tuple[car.CarState, custom.CarStateSP, structs.RadarDataT | None]:
+    """carState update loop, driven by can"""
     
-    CS = self.sm['carState']
-    # ... rest of state_control ...
+    can_strs = messaging.drain_sock_raw(self.can_sock, wait_for_one=True)
+    can_list = can_capnp_to_list(can_strs)
+    
+    # Update carState from CAN
+    CS, CS_SP = self.CI.update(can_list)
+    
+    # NEW: Update adjacent lane tracking from liveTracks
+    self.sm.update(0)  # Update SubMaster to get latest liveTracks
+    if self.sm.valid['liveTracks']:
+        self.CI.CS.update_adjacent_lanes_from_live_tracks(self.sm['liveTracks'])
+    
+    # ... rest of method continues (move the existing self.sm.update(0) if needed)
 ```
 
-**Important:** Call `self.CI.update_live_tracks()` not `self.CI.CS.update_adjacent_lanes_from_live_tracks()`!
+**Important:** The adjacent lane data is stored in `self.CI.CS` and accessed by CarController!
 
 ## 🎯 How It Works
 

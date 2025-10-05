@@ -213,10 +213,10 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     # LFA and HDA icons
     if self.frame % 5 == 0 and (not lka_steering or lka_steering_long):
       if ccnc_non_hda2:
-        # Get adjacent lane leads from CarState
-        # Note: CS is updated from carState message which comes from the same process
-        left_lead = CS.left_lane_lead
-        right_lead = CS.right_lane_lead
+        # Get adjacent lane leads from the stored values in CarState
+        # These are updated in card.py from liveTracks
+        left_lead = getattr(CS, 'left_lane_lead', None)
+        right_lead = getattr(CS, 'right_lane_lead', None)
         
         # Debug: Print what we're passing to create_ccnc (every 2 seconds)
         if self.frame % 100 == 0:
