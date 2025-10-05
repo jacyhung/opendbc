@@ -66,6 +66,9 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     self.apply_torque_last = 0
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0
+    
+    # Reference to radar interface for adjacent lane tracking
+    self.radar_interface = None
 
   def update(self, CC, CC_SP, CS, now_nanos):
     EsccCarController.update(self, CS)
@@ -206,9 +209,13 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     # LFA and HDA icons
     if self.frame % 5 == 0 and (not lka_steering or lka_steering_long):
       if ccnc_non_hda2:
+        # Get adjacent lane leads directly from radar interface
+        left_lead = self.radar_interface.left_lane_lead if self.radar_interface else None
+        right_lead = self.radar_interface.right_lane_lead if self.radar_interface else None
+        
         can_sends.extend(hyundaicanfd.create_ccnc(self.packer, self.CAN, self.CP.openpilotLongitudinalControl, CC.enabled, CC.hudControl, CC.leftBlinker,
                                                   CC.rightBlinker, CS.msg_161, CS.msg_162, CS.msg_1b5, CS.is_metric, CS.main_cruise_enabled, CS.out,
-                                                  self.lfa_icon, CS.left_lane_lead, CS.right_lane_lead))
+                                                  self.lfa_icon, left_lead, right_lead))
       else:
         can_sends.append(hyundaicanfd.create_lfahda_cluster(self.packer, self.CAN, CC.enabled, self.lfa_icon))
 

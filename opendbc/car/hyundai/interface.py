@@ -26,6 +26,27 @@ class CarInterface(CarInterfaceBase):
   CarController = CarController
   RadarInterface = RadarInterface
 
+  def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
+    super().__init__(CP, CP_SP)
+    
+    # Create and link radar interface for adjacent lane tracking
+    if not CP.radarUnavailable:
+      try:
+        self.rk = self.RadarInterface(CP, CP_SP)
+        # Link to controller for adjacent lane data
+        if hasattr(self, 'CC') and self.CC:
+          self.CC.radar_interface = self.rk
+      except Exception:
+        self.rk = None
+    else:
+      self.rk = None
+  
+  def set_radar_interface(self, radar_interface):
+    """Set radar interface reference for adjacent lane tracking (for external use)."""
+    self.rk = radar_interface
+    if self.CC:
+      self.CC.radar_interface = radar_interface
+
   @staticmethod
   def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
     ret.brand = "hyundai"
