@@ -92,6 +92,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     This is called from openpilot's control loop with sm['liveTracks'].
     """
     if not live_tracks or not hasattr(live_tracks, 'points'):
+      print("[CS] update_adjacent_lanes: No live_tracks or no points")
       return
     
     # Filter valid tracks by lane
@@ -112,6 +113,13 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     # Find closest in each lane
     self.left_lane_lead = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
     self.right_lane_lead = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
+    
+    # Debug output
+    print(f"[CS] Processed {len(live_tracks.points)} tracks -> Left: {len(left_lane)}, Right: {len(right_lane)}")
+    if self.left_lane_lead:
+      print(f"[CS] LEFT LEAD: {self.left_lane_lead.dRel:.1f}m @ {self.left_lane_lead.yRel:.2f}m")
+    if self.right_lane_lead:
+      print(f"[CS] RIGHT LEAD: {self.right_lane_lead.dRel:.1f}m @ {self.right_lane_lead.yRel:.2f}m")
 
   def recent_button_interaction(self) -> bool:
     # On some newer model years, the CANCEL button acts as a pause/resume button based on the PCM state
