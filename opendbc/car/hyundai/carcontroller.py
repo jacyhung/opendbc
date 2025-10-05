@@ -71,10 +71,6 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     self.radar_interface = None
 
   def update(self, CC, CC_SP, CS, now_nanos):
-    # Debug: Check what CS has when it arrives
-    if self.frame % 100 == 0:
-      print(f"[CC UPDATE] CS.left_lane_lead={CS.left_lane_lead}, CS.right_lane_lead={CS.right_lane_lead}")
-    
     EsccCarController.update(self, CS)
     LeadDataCarController.update(self, CC_SP)
     MadsCarController.update(self, self.CP, CC, CC_SP, self.frame)
@@ -219,11 +215,6 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
         right_lead = getattr(CS, 'right_lane_lead', None)
         left_lead_rear = getattr(CS, 'left_lane_lead_rear', None)
         right_lead_rear = getattr(CS, 'right_lane_lead_rear', None)
-        
-        # Debug: Print what we're passing to create_ccnc (every 2 seconds)
-        if self.frame % 100 == 0:
-          print(f"[CC FRAME {self.frame}] left_lead: {left_lead}, left_rear: {left_lead_rear}")
-          print(f"[CC FRAME {self.frame}] right_lead: {right_lead}, right_rear: {right_lead_rear}")
         
         can_sends.extend(hyundaicanfd.create_ccnc(self.packer, self.CAN, self.CP.openpilotLongitudinalControl, CC.enabled, CC.hudControl, CC.leftBlinker,
                                                   CC.rightBlinker, CS.msg_161, CS.msg_162, CS.msg_1b5, CS.is_metric, CS.main_cruise_enabled, CS.out,

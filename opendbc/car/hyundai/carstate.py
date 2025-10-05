@@ -107,7 +107,6 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     left_lane = []
     right_lane = []
     
-    filtered_count = 0
     for pt in live_tracks.points:
       if not pt.measured:
         continue
@@ -120,20 +119,15 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         # Filter out stationary objects (walls/barriers)
         # Real vehicles will have vRel < -1.0 (approaching) or similar to our speed
         if pt.vRel > -1.0:  # Nearly stationary - likely a wall/barrier
-          if abs(pt.yRel) > self.LANE_BOUNDARY:  # Only print if in adjacent lane area
-            print(f"[CS FILTER] Filtered stationary: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s (v_ego={v_ego:.1f})")
-          filtered_count += 1
           continue
       # else: We're stopped, keep all tracks (including stopped cars)
       
       # Left lane: tracks beyond left boundary but not too far
       if -self.MAX_LATERAL < pt.yRel < -self.LANE_BOUNDARY:
         left_lane.append(pt)
-        print(f"[CS] LEFT candidate: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s")
       # Right lane: tracks beyond right boundary but not too far
       elif self.LANE_BOUNDARY < pt.yRel < self.MAX_LATERAL:
         right_lane.append(pt)
-        print(f"[CS] RIGHT candidate: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s")
     
     # Find closest vehicle in each lane (simplest approach)
     # Just show the most relevant (closest) vehicle
@@ -145,12 +139,12 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.left_lane_lead_rear = None
     self.right_lane_lead_rear = None
     
-    # Debug output
-    print(f"[CS] Processed {len(live_tracks.points)} tracks -> Left: {len(left_lane)}, Right: {len(right_lane)}")
-    if self.left_lane_lead:
-      print(f"[CS] LEFT LEAD: {self.left_lane_lead.dRel:.1f}m @ {self.left_lane_lead.yRel:.2f}m, vRel={self.left_lane_lead.vRel:.1f}m/s")
-    if self.right_lane_lead:
-      print(f"[CS] RIGHT LEAD: {self.right_lane_lead.dRel:.1f}m @ {self.right_lane_lead.yRel:.2f}m, vRel={self.right_lane_lead.vRel:.1f}m/s")
+    # Minimal debug output (only when leads change)
+    # Uncomment for debugging:
+    # if self.left_lane_lead:
+    #   print(f"[CS] LEFT: {self.left_lane_lead.dRel:.1f}m @ {self.left_lane_lead.yRel:.2f}m")
+    # if self.right_lane_lead:
+    #   print(f"[CS] RIGHT: {self.right_lane_lead.dRel:.1f}m @ {self.right_lane_lead.yRel:.2f}m")
 
   def recent_button_interaction(self) -> bool:
     # On some newer model years, the CANCEL button acts as a pause/resume button based on the PCM state
