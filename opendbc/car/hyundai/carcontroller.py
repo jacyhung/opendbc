@@ -217,19 +217,17 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
         # These are updated in card.py from liveTracks
         left_lead = getattr(CS, 'left_lane_lead', None)
         right_lead = getattr(CS, 'right_lane_lead', None)
+        left_lead_rear = getattr(CS, 'left_lane_lead_rear', None)
+        right_lead_rear = getattr(CS, 'right_lane_lead_rear', None)
         
         # Debug: Print what we're passing to create_ccnc (every 2 seconds)
         if self.frame % 100 == 0:
-          print(f"[CC FRAME {self.frame}] left_lead: {left_lead}")
-          print(f"[CC FRAME {self.frame}] right_lead: {right_lead}")
-          if left_lead:
-            print(f"[CC FRAME {self.frame}] LEFT: {left_lead.dRel:.1f}m @ {left_lead.yRel:.2f}m")
-          if right_lead:
-            print(f"[CC FRAME {self.frame}] RIGHT: {right_lead.dRel:.1f}m @ {right_lead.yRel:.2f}m")
+          print(f"[CC FRAME {self.frame}] left_lead: {left_lead}, left_rear: {left_lead_rear}")
+          print(f"[CC FRAME {self.frame}] right_lead: {right_lead}, right_rear: {right_lead_rear}")
         
         can_sends.extend(hyundaicanfd.create_ccnc(self.packer, self.CAN, self.CP.openpilotLongitudinalControl, CC.enabled, CC.hudControl, CC.leftBlinker,
                                                   CC.rightBlinker, CS.msg_161, CS.msg_162, CS.msg_1b5, CS.is_metric, CS.main_cruise_enabled, CS.out,
-                                                  self.lfa_icon, left_lead, right_lead))
+                                                  self.lfa_icon, left_lead, right_lead, left_lead_rear, right_lead_rear))
       else:
         can_sends.append(hyundaicanfd.create_lfahda_cluster(self.packer, self.CAN, CC.enabled, self.lfa_icon))
 

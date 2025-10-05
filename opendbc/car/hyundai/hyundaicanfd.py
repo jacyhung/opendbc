@@ -133,7 +133,8 @@ def create_lfahda_cluster(packer, CAN, enabled, lfa_icon):
 
 
 def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBlinker, rightBlinker, msg_161, msg_162, msg_1b5,
-                is_metric, main_cruise_enabled, out, lfa_icon, left_lane_lead=None, right_lane_lead=None):
+                is_metric, main_cruise_enabled, out, lfa_icon, left_lane_lead=None, right_lane_lead=None,
+                left_lane_lead_rear=None, right_lane_lead_rear=None):
   for f in {"FAULT_LSS", "FAULT_HDA", "FAULT_DAS", "FAULT_LFA", "FAULT_DAW", "FAULT_ESS"}:
     msg_162[f] = 0
   if msg_161["ALERTS_2"] == 5:
@@ -270,7 +271,7 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     msg_162["LEAD"] = 0 if not main_cruise_enabled else 2 if enabled else 1
     msg_162["LEAD_DISTANCE"] = msg_1b5["Longitudinal_Distance"]
 
-  # Adjacent lane leads (left and right)
+  # Adjacent lane leads (left and right) - FAR vehicles
   if left_lane_lead is not None:
     left_dist = min(int(left_lane_lead.dRel * 10), 2047)
     msg_162.update({
@@ -278,16 +279,16 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
       "LEAD_LEFT_DISTANCE": left_dist,
       "LEAD_LEFT_LATERAL": 80,
     })
-    print(f"[CCNC] LEFT LEAD: icon=2, dist={left_dist} (raw={left_lane_lead.dRel:.1f}m), lat=80")
+    print(f"[CCNC] LEFT LEAD (FAR): icon=2, dist={left_dist} (raw={left_lane_lead.dRel:.1f}m), lat=80")
   else:
     msg_162.update({
       "LEAD_LEFT": 0,  # HIDDEN
       "LEAD_LEFT_DISTANCE": 0,
       "LEAD_LEFT_LATERAL": 0,
     })
-    print(f"[CCNC] LEFT LEAD: HIDDEN")
+    print(f"[CCNC] LEFT LEAD (FAR): HIDDEN")
   
-  # Right lane lead
+  # Right lane lead - FAR vehicles
   if right_lane_lead is not None:
     right_dist = min(int(right_lane_lead.dRel * 10), 2047)
     msg_162.update({
@@ -295,14 +296,46 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
       "LEAD_RIGHT_DISTANCE": right_dist,
       "LEAD_RIGHT_LATERAL": 80,
     })
-    print(f"[CCNC] RIGHT LEAD: icon=2, dist={right_dist} (raw={right_lane_lead.dRel:.1f}m), lat=80")
+    print(f"[CCNC] RIGHT LEAD (FAR): icon=2, dist={right_dist} (raw={right_lane_lead.dRel:.1f}m), lat=80")
   else:
     msg_162.update({
       "LEAD_RIGHT": 0,  # HIDDEN
       "LEAD_RIGHT_DISTANCE": 0,
       "LEAD_RIGHT_LATERAL": 0,
     })
-    print(f"[CCNC] RIGHT LEAD: HIDDEN")
+    print(f"[CCNC] RIGHT LEAD (FAR): HIDDEN")
+  
+  # Adjacent lane leads - REAR (CLOSE) vehicles
+  if left_lane_lead_rear is not None:
+    left_rear_dist = min(int(left_lane_lead_rear.dRel * 10), 255)
+    msg_162.update({
+      "LEAD_LEFT_REAR_STATUS": 2,
+      "LEAD_LEFT_REAR_DISTANCE": left_rear_dist,
+      "LEAD_LEFT_REAR_LATERAL": 80,
+    })
+    print(f"[CCNC] LEFT LEAD (CLOSE): icon=2, dist={left_rear_dist} (raw={left_lane_lead_rear.dRel:.1f}m), lat=80")
+  else:
+    msg_162.update({
+      "LEAD_LEFT_REAR_STATUS": 0,
+      "LEAD_LEFT_REAR_DISTANCE": 0,
+      "LEAD_LEFT_REAR_LATERAL": 0,
+    })
+  
+  # Right lane lead - REAR (CLOSE) vehicles
+  if right_lane_lead_rear is not None:
+    right_rear_dist = min(int(right_lane_lead_rear.dRel * 10), 255)
+    msg_162.update({
+      "LEAD_RIGHT_REAR_STATUS": 2,
+      "LEAD_RIGHT_REAR_DISTANCE": right_rear_dist,
+      "LEAD_RIGHT_REAR_LATERAL": 80,
+    })
+    print(f"[CCNC] RIGHT LEAD (CLOSE): icon=2, dist={right_rear_dist} (raw={right_lane_lead_rear.dRel:.1f}m), lat=80")
+  else:
+    msg_162.update({
+      "LEAD_RIGHT_REAR_STATUS": 0,
+      "LEAD_RIGHT_REAR_DISTANCE": 0,
+      "LEAD_RIGHT_REAR_LATERAL": 0,
+    })
 
   return [packer.make_can_msg(msg, CAN.ECAN, data) for msg, data in [("CCNC_0x161", msg_161), ("CCNC_0x162", msg_162)]]
 
