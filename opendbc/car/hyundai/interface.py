@@ -32,6 +32,13 @@ class CarInterface(CarInterfaceBase):
     # Radar interface will be set externally by openpilot
     # We don't create it here because radard creates its own instance
     self.rk = None
+    self.live_tracks = None  # Store latest liveTracks for adjacent lane tracking
+  
+  def update_live_tracks(self, live_tracks):
+    """Update liveTracks data for adjacent lane tracking."""
+    self.live_tracks = live_tracks
+    if self.live_tracks:
+      self.CS.update_adjacent_lanes_from_live_tracks(self.live_tracks)
   
   def set_radar_interface(self, radar_interface):
     """Set radar interface reference for adjacent lane tracking (for external use)."""

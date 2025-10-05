@@ -18,23 +18,21 @@ self.sm = messaging.SubMaster(['liveParameters', 'liveTorqueParameters', 'modelV
                               poll='selfdriveState')
 ```
 
-### Change 2: Update adjacent lanes in `state_control()` method
+### Change 2: Update adjacent lanes in CarInterface
 
-Find the `state_control()` method (around line 85) and add this at the **very beginning**:
+Find the `state_control()` method (around line 85) and add at the **very beginning**:
 
 ```python
 def state_control(self):
-    # Update adjacent lane tracking from radar data BEFORE processing
+    # Update adjacent lane tracking from radar data
     if self.sm.valid['liveTracks']:
-        self.CI.CS.update_adjacent_lanes_from_live_tracks(self.sm['liveTracks'])
+        self.CI.update_live_tracks(self.sm['liveTracks'])
     
     CS = self.sm['carState']
-    # ... rest of the method
+    # ... rest of state_control ...
 ```
 
-**Important:** 
-- Use `self.sm.valid['liveTracks']` not `self.sm.updated['liveTracks']`
-- Add it at the START of `state_control()`, not in `update()`!
+**Important:** Call `self.CI.update_live_tracks()` not `self.CI.CS.update_adjacent_lanes_from_live_tracks()`!
 
 ## 🎯 How It Works
 

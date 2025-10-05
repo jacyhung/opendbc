@@ -209,14 +209,19 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     # LFA and HDA icons
     if self.frame % 5 == 0 and (not lka_steering or lka_steering_long):
       if ccnc_non_hda2:
-        # Get adjacent lane leads from CarState (populated from liveTracks in openpilot)
+        # Get adjacent lane leads from CarState
+        # Note: CS is updated from carState message which comes from the same process
         left_lead = CS.left_lane_lead
         right_lead = CS.right_lane_lead
         
         # Debug: Print what we're passing to create_ccnc (every 2 seconds)
         if self.frame % 100 == 0:
-          print(f"[CC] left_lead: {left_lead}")
-          print(f"[CC] right_lead: {right_lead}")
+          print(f"[CC FRAME {self.frame}] left_lead: {left_lead}")
+          print(f"[CC FRAME {self.frame}] right_lead: {right_lead}")
+          if left_lead:
+            print(f"[CC FRAME {self.frame}] LEFT: {left_lead.dRel:.1f}m @ {left_lead.yRel:.2f}m")
+          if right_lead:
+            print(f"[CC FRAME {self.frame}] RIGHT: {right_lead.dRel:.1f}m @ {right_lead.yRel:.2f}m")
         
         can_sends.extend(hyundaicanfd.create_ccnc(self.packer, self.CAN, self.CP.openpilotLongitudinalControl, CC.enabled, CC.hudControl, CC.leftBlinker,
                                                   CC.rightBlinker, CS.msg_161, CS.msg_162, CS.msg_1b5, CS.is_metric, CS.main_cruise_enabled, CS.out,
