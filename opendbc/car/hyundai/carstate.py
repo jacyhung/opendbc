@@ -70,7 +70,17 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.cluster_speed = 0
     self.cluster_speed_counter = CLUSTER_SAMPLE_RATE
 
+    # Adjacent lane radar tracking
+    self.left_lane_lead = None
+    self.right_lane_lead = None
+
     self.params = CarControllerParams(CP)
+
+  def update_radar_tracks(self, radar_interface):
+    """Update adjacent lane tracking data from radar interface."""
+    if hasattr(radar_interface, 'left_lane_lead'):
+      self.left_lane_lead = radar_interface.left_lane_lead
+      self.right_lane_lead = radar_interface.right_lane_lead
 
   def recent_button_interaction(self) -> bool:
     # On some newer model years, the CANCEL button acts as a pause/resume button based on the PCM state

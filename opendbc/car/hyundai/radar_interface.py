@@ -44,6 +44,10 @@ class RadarInterface(RadarInterfaceBase, RadarInterfaceExt):
     self.radar_off_can = CP.radarUnavailable
     self.rcp = get_radar_can_parser(CP, self.radar_addr, self.radar_count)
 
+    # Adjacent lane tracking
+    self.left_lane_lead = None
+    self.right_lane_lead = None
+
     if self.CP_SP.flags & HyundaiFlagsSP.RADAR_LEAD_ONLY:
       self.initialize_radar_ext(self.trigger_msg)
 
@@ -133,4 +137,69 @@ class RadarInterface(RadarInterfaceBase, RadarInterfaceExt):
             del self.pts[addr]
 
     ret.points = list(self.pts.values())
+    
+    # Extract adjacent lane leads for CCNC display
+    if self.CP_SP.flags & HyundaiFlagsSP.RADAR_FULL_RADAR:
+      self._update_adjacent_lane_leads(ret.points)
+    
     return ret
+
+  def _update_adjacent_lane_leads(self, radar_points):
+    """
+    Extract left and right lane lead vehicles from radar points.
+    
+    Lane detection strategy:
+    - Center lane: |yRel| < 1.8m (typical lane width ~3.6m, so ±1.8m from center)
+    - Left lane: yRel < -1.8m (further left than center lane boundary)
+    - Right lane: yRel > 1.8m (further right than center lane boundary)
+    
+    Note: Adjust threshold based on your testing. Common values:
+    - Narrow lanes (US/Europe): 1.5-1.7m
+    - Standard lanes: 1.8m (recommended starting point)
+    - Wide lanes (highways): 2.0m
+    """
+    # Lane boundary threshold - distance from vehicle center to lane edge
+    # This assumes ~3.6m lane width (typical for highways)
+    LANE_BOUNDARY = 1.8  # meters
+    
+    # Filter valid tracks by lane
+    # Center lane: tracks within ±LANE_BOUNDARY
+    center_lane = [pt for pt in radar_points if pt.measured and abs(pt.yRel) <= LANE_BOUNDARY]
+    # Left lane: tracks beyond left boundary
+    left_lane = [pt for pt in radar_points if pt.measured and pt.yRel < -LANE_BOUNDARY]
+    # Right lane: tracks beyond right boundary  
+    right_lane = [pt for pt in radar_points if pt.measured and pt.yRel > LANE_BOUNDARY]
+    
+    # Find closest in each lane
+    self.left_lane_lead = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
+    self.right_lane_lead = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
+    
+    # Debug: Uncomment to see all tracks and their lane assignments
+    self._debug_print_tracks(radar_points, center_lane, left_lane, right_lane)
+  
+  def _debug_print_tracks(self, all_tracks, center, left, right):
+    """Debug helper: Print all radar tracks with lane assignments."""
+    print(f"\n=== Radar Tracks (Total: {len(all_tracks)}) ===")
+    print(f"Center lane: {len(center)} | Left lane: {len(left)} | Right lane: {len(right)}")
+    
+    # Sort by distance for easier reading
+    sorted_tracks = sorted(all_tracks, key=lambda pt: pt.dRel)
+    
+    for pt in sorted_tracks:
+      # Determine which lane this track is in
+      if abs(pt.yRel) <= 1.8:
+        lane = "CENTER"
+      elif pt.yRel < -1.8:
+        lane = "LEFT  "
+      else:
+        lane = "RIGHT "
+      
+      # Mark if this is the selected lead for that lane
+      marker = ""
+      if self.left_lane_lead and pt.trackId == self.left_lane_lead.trackId:
+        marker = " ← LEFT LEAD"
+      elif self.right_lane_lead and pt.trackId == self.right_lane_lead.trackId:
+        marker = " ← RIGHT LEAD"
+      
+      print(f"  [{lane}] Track {pt.trackId}: {pt.dRel:5.1f}m ahead, {pt.yRel:+5.2f}m lateral, {pt.vRel:+5.1f}m/s{marker}")
+    print("=" * 60)
