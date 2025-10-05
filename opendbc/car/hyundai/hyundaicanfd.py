@@ -305,37 +305,38 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     })
     print(f"[CCNC] RIGHT LEAD (FAR): HIDDEN")
   
-  # Adjacent lane leads - REAR (CLOSE) vehicles
-  if left_lane_lead_rear is not None:
-    left_rear_dist = min(int(left_lane_lead_rear.dRel * 10), 255)
-    msg_162.update({
-      "LEAD_LEFT_REAR_STATUS": 2,
-      "LEAD_LEFT_REAR_DISTANCE": left_rear_dist,
-      "LEAD_LEFT_REAR_LATERAL": 80,
-    })
-    print(f"[CCNC] LEFT LEAD (CLOSE): icon=2, dist={left_rear_dist} (raw={left_lane_lead_rear.dRel:.1f}m), lat=80")
-  else:
-    msg_162.update({
-      "LEAD_LEFT_REAR_STATUS": 0,
-      "LEAD_LEFT_REAR_DISTANCE": 0,
-      "LEAD_LEFT_REAR_LATERAL": 0,
-    })
+  # TEST MODE: Cycle through distance values to see what works on cluster
+  # This will help you visually identify the correct settings
+  import time
+  test_cycle_seconds = 2  # Change value every 2 seconds
+  current_time = int(time.time())
+  cycle_position = (current_time // test_cycle_seconds) % 26  # 26 steps: 0-25
   
-  # Right lane lead - REAR (CLOSE) vehicles
-  if right_lane_lead_rear is not None:
-    right_rear_dist = min(int(right_lane_lead_rear.dRel * 10), 255)
-    msg_162.update({
-      "LEAD_RIGHT_REAR_STATUS": 2,
-      "LEAD_RIGHT_REAR_DISTANCE": right_rear_dist,
-      "LEAD_RIGHT_REAR_LATERAL": 80,
-    })
-    print(f"[CCNC] RIGHT LEAD (CLOSE): icon=2, dist={right_rear_dist} (raw={right_lane_lead_rear.dRel:.1f}m), lat=80")
-  else:
-    msg_162.update({
-      "LEAD_RIGHT_REAR_STATUS": 0,
-      "LEAD_RIGHT_REAR_DISTANCE": 0,
-      "LEAD_RIGHT_REAR_LATERAL": 0,
-    })
+  # Cycle through different distance values (0 to 25.5m in 1m steps)
+  test_distance = cycle_position * 10  # 0, 10, 20, ... 250 (represents 0m, 1m, 2m, ... 25m)
+  
+  # Test different status values
+  test_status_values = [0, 1, 2, 3, 4]
+  test_status = test_status_values[(current_time // 10) % len(test_status_values)]
+  
+  # Test different lateral values
+  test_lateral_values = [0, 40, 80, 120]  # 0m, 4m, 8m, 12m
+  test_lateral = test_lateral_values[(current_time // 8) % len(test_lateral_values)]
+  
+  # RIGHT REAR - Always testing
+  msg_162.update({
+    "LEAD_RIGHT_REAR_STATUS": test_status,
+    "LEAD_RIGHT_REAR_DISTANCE": test_distance,
+    "LEAD_RIGHT_REAR_LATERAL": test_lateral,
+  })
+  print(f"[CCNC TEST] RIGHT REAR: status={test_status}, dist={test_distance} ({test_distance/10:.1f}m), lat={test_lateral} ({test_lateral/10:.1f}m)")
+  
+  # LEFT REAR - Disabled for now
+  msg_162.update({
+    "LEAD_LEFT_REAR_STATUS": 0,
+    "LEAD_LEFT_REAR_DISTANCE": 0,
+    "LEAD_LEFT_REAR_LATERAL": 0,
+  })
 
   return [packer.make_can_msg(msg, CAN.ECAN, data) for msg, data in [("CCNC_0x161", msg_161), ("CCNC_0x162", msg_162)]]
 

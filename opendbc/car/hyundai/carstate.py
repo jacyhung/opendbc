@@ -107,6 +107,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     left_lane = []
     right_lane = []
     
+    filtered_count = 0
     for pt in live_tracks.points:
       if not pt.measured:
         continue
@@ -119,15 +120,20 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         # Filter out stationary objects (walls/barriers)
         # Real vehicles will have vRel < -1.0 (approaching) or similar to our speed
         if pt.vRel > -1.0:  # Nearly stationary - likely a wall/barrier
+          if abs(pt.yRel) > self.LANE_BOUNDARY:  # Only print if in adjacent lane area
+            print(f"[CS FILTER] Filtered stationary: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s (v_ego={v_ego:.1f})")
+          filtered_count += 1
           continue
       # else: We're stopped, keep all tracks (including stopped cars)
       
       # Left lane: tracks beyond left boundary but not too far
       if -self.MAX_LATERAL < pt.yRel < -self.LANE_BOUNDARY:
         left_lane.append(pt)
+        print(f"[CS] LEFT candidate: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s")
       # Right lane: tracks beyond right boundary but not too far
       elif self.LANE_BOUNDARY < pt.yRel < self.MAX_LATERAL:
         right_lane.append(pt)
+        print(f"[CS] RIGHT candidate: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s")
     
     # Find closest vehicle in each lane (simplest approach)
     # Just show the most relevant (closest) vehicle
