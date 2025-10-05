@@ -71,6 +71,10 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     self.radar_interface = None
 
   def update(self, CC, CC_SP, CS, now_nanos):
+    # Debug: Check what CS has when it arrives
+    if self.frame % 100 == 0:
+      print(f"[CC UPDATE] CS.left_lane_lead={CS.left_lane_lead}, CS.right_lane_lead={CS.right_lane_lead}")
+    
     EsccCarController.update(self, CS)
     LeadDataCarController.update(self, CC_SP)
     MadsCarController.update(self, self.CP, CC, CC_SP, self.frame)

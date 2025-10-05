@@ -39,6 +39,7 @@ class CarInterface(CarInterfaceBase):
     self.live_tracks = live_tracks
     if self.live_tracks:
       self.CS.update_adjacent_lanes_from_live_tracks(self.live_tracks)
+      print(f"[CI] Updated CS: left={self.CS.left_lane_lead}, right={self.CS.right_lane_lead}")
   
   def set_radar_interface(self, radar_interface):
     """Set radar interface reference for adjacent lane tracking (for external use)."""
