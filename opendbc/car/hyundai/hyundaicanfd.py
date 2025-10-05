@@ -304,7 +304,7 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
   # REAR signals - disabled for now
   msg_162.update({
     "LEAD_LEFT_REAR_STATUS": 1,
-    "LEAD_LEFT_REAR_DISTANCE": 1,
+    "LEAD_LEFT_REAR_DISTANCE": 25,
     "LEAD_LEFT_REAR_LATERAL": 80,
     "LEAD_RIGHT_REAR_STATUS": 0,
     "LEAD_RIGHT_REAR_DISTANCE": 0,
