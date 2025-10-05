@@ -302,11 +302,14 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     })
   
   # REAR signals - blind spot area (0-10m beside/behind vehicle)
-  # Distance range: 1-10 in 0.1m units (10-100 raw value)
-  # 1 = closest to car, 10 = further back on the side
+  # Distance appears to be INVERTED: smaller value = further back, larger value = closer to front
+  # Try inverting: 10m - actual_distance
   if left_lane_lead_rear is not None:
-    # Clamp to 1-10m range and convert to 0.1m units
-    left_rear_dist = max(10, min(int(left_lane_lead_rear.dRel * 10), 100))
+    # Invert the distance: closer vehicles get higher values
+    # If car is at 2m, send (10-2)*10 = 80
+    # If car is at 8m, send (10-8)*10 = 20
+    inverted_dist = max(0, 10.0 - left_lane_lead_rear.dRel)
+    left_rear_dist = max(1, min(int(inverted_dist * 10), 100))
     msg_162.update({
       "LEAD_LEFT_REAR_STATUS": 2,  # Same icon as front
       "LEAD_LEFT_REAR_DISTANCE": left_rear_dist,
@@ -320,8 +323,9 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     })
   
   if right_lane_lead_rear is not None:
-    # Clamp to 1-10m range and convert to 0.1m units
-    right_rear_dist = max(10, min(int(right_lane_lead_rear.dRel * 10), 100))
+    # Invert the distance: closer vehicles get higher values
+    inverted_dist = max(0, 10.0 - right_lane_lead_rear.dRel)
+    right_rear_dist = max(1, min(int(inverted_dist * 10), 100))
     msg_162.update({
       "LEAD_RIGHT_REAR_STATUS": 2,  # Same icon as front
       "LEAD_RIGHT_REAR_DISTANCE": right_rear_dist,
