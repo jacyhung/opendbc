@@ -152,8 +152,8 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     "LKA_ICON": 4 if enabled else 4 if msg_1b5.get("Info_LftLnQualSta", 0) > 0 else 4 if msg_1b5.get("Info_RtLnQualSta", 0) > 0 else 3,
     "LFA_ICON": 2 if lfa_icon else 0,
     "CENTERLINE": 1 if lfa_icon else 0,
-    "LANELINE_LEFT": (0 if not lfa_icon else 1 if not hud.leftLaneVisible else 4 if hud.leftLaneDepart else 6 if leftBlinker or rightBlinker else 2),
-    "LANELINE_RIGHT": (0 if not lfa_icon else 1 if not hud.rightLaneVisible else 4 if hud.rightLaneDepart else 6 if leftBlinker or rightBlinker else 2),
+    "LANELINE_LEFT": (1 if not msg_1b5.get("Info_LftLnQualSta", 0) > 0 else 4 if hud.leftLaneDepart else 6 if leftBlinker or rightBlinker else 2),
+    "LANELINE_RIGHT": (1 if not msg_1b5.get("Info_LftLnQualSta", 0) > 0 else 4 if hud.rightLaneDepart else 6 if leftBlinker or rightBlinker else 2),
     "LCA_LEFT_ICON": (0 if not lfa_icon or out.vEgo < LANE_CHANGE_SPEED_MIN else 1 if out.leftBlindspot else 2 if leftBlinker or rightBlinker else 4),
     "LCA_RIGHT_ICON": (0 if not lfa_icon or out.vEgo < LANE_CHANGE_SPEED_MIN else 1 if out.rightBlindspot else 2 if leftBlinker or rightBlinker else 4),
     "LCA_LEFT_ARROW": 2 if leftBlinker else 0,
@@ -161,44 +161,41 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
   })
 
 # lanelines
-  leftlaneraw, rightlaneraw = msg_1b5["Info_LftLnPosVal"], msg_1b5["Info_RtLnPosVal"]
+  if lfa_icon and (leftBlinker or rightBlinker):
+    leftlaneraw, rightlaneraw = msg_1b5["Info_LftLnPosVal"], msg_1b5["Info_RtLnPosVal"]
 
-  scale_per_m = 15 / 1.7
-  leftlane = abs(int(round(15 + (leftlaneraw - 1.7) * scale_per_m)))
-  rightlane = abs(int(round(15 + (rightlaneraw - 1.7) * scale_per_m)))
+    scale_per_m = 15 / 1.7
+    leftlane = abs(int(round(15 + (leftlaneraw - 1.7) * scale_per_m)))
+    rightlane = abs(int(round(15 + (rightlaneraw - 1.7) * scale_per_m)))
 
-  if msg_1b5["Info_LftLnQualSta"] not in (2, 3):
-    leftlane = 0
-  if msg_1b5["Info_RtLnQualSta"] not in (2, 3):
-    rightlane = 0
+    if msg_1b5["Info_LftLnQualSta"] not in (2, 3):
+      leftlane = 0
+    if msg_1b5["Info_RtLnQualSta"] not in (2, 3):
+      rightlane = 0
 
-  if leftlaneraw == -2.0248375:
-    leftlane = 30 - rightlane
-  if rightlaneraw == 2.0248375:
-    rightlane = 30 - leftlane
+    if leftlaneraw == -2.0248375:
+      leftlane = 30 - rightlane
+    if rightlaneraw == 2.0248375:
+      rightlane = 30 - leftlane
 
-  if leftlaneraw == rightlaneraw == 0:
-    leftlane = rightlane = 15
-  elif leftlaneraw == 0:
-    leftlane = 30 - rightlane
-  elif rightlaneraw == 0:
-    rightlane = 30 - leftlane
+    if leftlaneraw == rightlaneraw == 0:
+      leftlane = rightlane = 15
+    elif leftlaneraw == 0:
+      leftlane = 30 - rightlane
+    elif rightlaneraw == 0:
+      rightlane = 30 - leftlane
 
-  total = leftlane + rightlane
-  if total == 0:
-    leftlane = rightlane = 15
-  else:
-    leftlane = round((leftlane / total) * 30)
-    rightlane = 30 - leftlane
+    total = leftlane + rightlane
+    if total == 0:
+      leftlane = rightlane = 15
+    else:
+      leftlane = round((leftlane / total) * 30)
+      rightlane = 30 - leftlane
 
-  msg_161["LANELINE_LEFT_POSITION"] = leftlane
-  msg_161["LANELINE_RIGHT_POSITION"] = rightlane
+    msg_161["LANELINE_LEFT_POSITION"] = leftlane
+    msg_161["LANELINE_RIGHT_POSITION"] = rightlane
 
-#LANE CURVATURE with smoothing
-  alpha_curve = 0.2  # smoothing factor for curvature
-  if not hasattr(create_ccnc, "_prev_curvature"):
-    create_ccnc._prev_curvature = 0
-
+  #LANE CURVATURE
   leftlanequal = msg_1b5["Info_LftLnQualSta"]
   rightlanequal = msg_1b5["Info_RtLnQualSta"]
   leftlanecurvature = msg_1b5["Info_LftLnCvtrVal"]
@@ -219,17 +216,12 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     curvature = (leftlanecurvature + rightlanecurvature) / 2
 
   curvature = -curvature * 6
-
-  # Smoothing for curvature
-  smoothed_curvature = alpha_curve * curvature + (1 - alpha_curve) * create_ccnc._prev_curvature
-  create_ccnc._prev_curvature = smoothed_curvature
-
-  clipped_curvature = max(0, min(0.032767, abs(smoothed_curvature)))
+  clipped_curvature = max(0, min(0.032767, abs(curvature)))
   scaled_curvature = round((clipped_curvature / 0.032767) * 15)
-  value = max(0, min(scaled_curvature, 15) + (-1 if smoothed_curvature < 0 else 0))
+  value = max(0, min(scaled_curvature, 15) + (-1 if curvature < 0 else 0))
 
   msg_161["LANELINE_CURVATURE"] = value
-  msg_161["LANELINE_CURVATURE_DIRECTION"] = 1 if smoothed_curvature < 0 else 0
+  msg_161["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 else 0
 
   # LEAD
   if not enabled:
