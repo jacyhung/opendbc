@@ -80,6 +80,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.LANE_BOUNDARY = 1.8
     self.MAX_LATERAL = 5.5
     self.REAR_DISTANCE_THRESHOLD = 10.0  # meters - vehicles closer than this are "rear"
+    self.MIN_RELATIVE_VELOCITY = -30.0  # m/s - minimum relative velocity to consider (filters stationary objects)
 
     self.params = CarControllerParams(CP)
 
@@ -89,10 +90,14 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       self.left_lane_lead = radar_interface.left_lane_lead
       self.right_lane_lead = radar_interface.right_lane_lead
   
-  def update_adjacent_lanes_from_live_tracks(self, live_tracks):
+  def update_adjacent_lanes_from_live_tracks(self, live_tracks, v_ego=0.0):
     """
     Update adjacent lane leads from liveTracks message (published by radard).
     This is called from openpilot's control loop with sm['liveTracks'].
+    
+    Args:
+        live_tracks: RadarData message with radar points
+        v_ego: Vehicle's own velocity in m/s (used for stationary object filtering)
     """
     if not live_tracks or not hasattr(live_tracks, 'points'):
       print("[CS] update_adjacent_lanes: No live_tracks or no points")
@@ -106,6 +111,17 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       if not pt.measured:
         continue
       
+      # Filter out stationary objects (walls, barriers, signs)
+      # Strategy:
+      # - If we're moving (v_ego > 1 m/s): Filter objects with vRel ≈ 0 (stationary barriers)
+      # - If we're stopped (v_ego < 1 m/s): Keep all objects (stopped cars next to us are valid)
+      if v_ego > 1.0:  # We're moving
+        # Filter out stationary objects (walls/barriers)
+        # Real vehicles will have vRel < -1.0 (approaching) or similar to our speed
+        if pt.vRel > -1.0:  # Nearly stationary - likely a wall/barrier
+          continue
+      # else: We're stopped, keep all tracks (including stopped cars)
+      
       # Left lane: tracks beyond left boundary but not too far
       if -self.MAX_LATERAL < pt.yRel < -self.LANE_BOUNDARY:
         left_lane.append(pt)
@@ -113,29 +129,22 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       elif self.LANE_BOUNDARY < pt.yRel < self.MAX_LATERAL:
         right_lane.append(pt)
     
-    # Split into front (far) and rear (close) based on distance
-    # Close vehicles (< 10m) go to REAR signals, far vehicles go to main LEAD signals
-    left_lane_far = [pt for pt in left_lane if pt.dRel >= self.REAR_DISTANCE_THRESHOLD]
-    left_lane_close = [pt for pt in left_lane if pt.dRel < self.REAR_DISTANCE_THRESHOLD]
-    right_lane_far = [pt for pt in right_lane if pt.dRel >= self.REAR_DISTANCE_THRESHOLD]
-    right_lane_close = [pt for pt in right_lane if pt.dRel < self.REAR_DISTANCE_THRESHOLD]
+    # Find closest vehicle in each lane (simplest approach)
+    # Just show the most relevant (closest) vehicle
+    self.left_lane_lead = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
+    self.right_lane_lead = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
     
-    # Find closest in each category
-    self.left_lane_lead = min(left_lane_far, key=lambda pt: pt.dRel) if left_lane_far else None
-    self.left_lane_lead_rear = min(left_lane_close, key=lambda pt: pt.dRel) if left_lane_close else None
-    self.right_lane_lead = min(right_lane_far, key=lambda pt: pt.dRel) if right_lane_far else None
-    self.right_lane_lead_rear = min(right_lane_close, key=lambda pt: pt.dRel) if right_lane_close else None
+    # For now, don't use REAR signals (they seem to cause confusion)
+    # Can re-enable later if we understand their purpose better
+    self.left_lane_lead_rear = None
+    self.right_lane_lead_rear = None
     
     # Debug output
-    print(f"[CS] Processed {len(live_tracks.points)} tracks -> Left: {len(left_lane)} (far:{len(left_lane_far)}, close:{len(left_lane_close)}), Right: {len(right_lane)} (far:{len(right_lane_far)}, close:{len(right_lane_close)})")
+    print(f"[CS] Processed {len(live_tracks.points)} tracks -> Left: {len(left_lane)}, Right: {len(right_lane)}")
     if self.left_lane_lead:
-      print(f"[CS] LEFT LEAD (FAR): {self.left_lane_lead.dRel:.1f}m @ {self.left_lane_lead.yRel:.2f}m")
-    if self.left_lane_lead_rear:
-      print(f"[CS] LEFT LEAD (CLOSE): {self.left_lane_lead_rear.dRel:.1f}m @ {self.left_lane_lead_rear.yRel:.2f}m")
+      print(f"[CS] LEFT LEAD: {self.left_lane_lead.dRel:.1f}m @ {self.left_lane_lead.yRel:.2f}m, vRel={self.left_lane_lead.vRel:.1f}m/s")
     if self.right_lane_lead:
-      print(f"[CS] RIGHT LEAD (FAR): {self.right_lane_lead.dRel:.1f}m @ {self.right_lane_lead.yRel:.2f}m")
-    if self.right_lane_lead_rear:
-      print(f"[CS] RIGHT LEAD (CLOSE): {self.right_lane_lead_rear.dRel:.1f}m @ {self.right_lane_lead_rear.yRel:.2f}m")
+      print(f"[CS] RIGHT LEAD: {self.right_lane_lead.dRel:.1f}m @ {self.right_lane_lead.yRel:.2f}m, vRel={self.right_lane_lead.vRel:.1f}m/s")
 
   def recent_button_interaction(self) -> bool:
     # On some newer model years, the CANCEL button acts as a pause/resume button based on the PCM state
