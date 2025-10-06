@@ -119,6 +119,10 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       if not pt.measured:
         continue
       
+      # Debug: Print ALL points in adjacent lanes when stopped
+      if v_ego < 0.5 and (abs(pt.yRel) > self.LANE_BOUNDARY):
+        print(f"[CS ALL] {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s, trackId={pt.trackId}")
+      
       # Simple filtering like openpilot's lead detection
       
       # Filter 1: Distance sanity check
@@ -140,8 +144,8 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         # Moving vehicles will have significant vRel (either approaching or moving away)
         if abs(pt.vRel) < 2.0:  # Not moving fast enough - likely stationary noise
           continue
-        # Debug: Print what we're considering
-        print(f"[CS STOPPED] Candidate: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s, trackId={pt.trackId}")
+        # Debug: Print what passed velocity filter
+        print(f"[CS PASS] Candidate: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s, trackId={pt.trackId}")
       
       # Left lane: tracks beyond left boundary but not too far
       if -self.MAX_LATERAL < pt.yRel < -self.LANE_BOUNDARY:
