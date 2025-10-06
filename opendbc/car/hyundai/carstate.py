@@ -127,14 +127,16 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         continue
       
       # Filter 2: Velocity-based filtering
-      if v_ego > 1.0:  # Moving
+      if v_ego > 2.0:  # Moving at decent speed
         # Filter out stationary objects (vRel ≈ 0 when we're moving)
-        if pt.vRel > -0.5:  # Nearly stationary - likely wall/barrier
+        if pt.vRel > -1.0:  # Nearly stationary - likely wall/barrier
           continue
-      else:  # Stopped or very slow (v_ego < 1.0)
-        # When stopped, we can't reliably distinguish cars from walls
-        # Don't show anything - too much noise
-        # Real use case: only show adjacent vehicles when driving
+      elif v_ego > 0.5:  # Slow speed
+        # Be less strict at slow speeds
+        if pt.vRel > 0.0:  # Completely stationary
+          continue
+      else:  # Stopped (v_ego < 0.5)
+        # When stopped, don't show anything - too much noise
         continue
       
       # Left lane: tracks beyond left boundary but not too far
