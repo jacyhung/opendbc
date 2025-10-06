@@ -38,7 +38,9 @@ class CarInterface(CarInterfaceBase):
     """Update liveTracks data for adjacent lane tracking."""
     self.live_tracks = live_tracks
     if self.live_tracks:
-      self.CS.update_adjacent_lanes_from_live_tracks(self.live_tracks)
+      # Pass v_ego from last CarState update
+      v_ego = getattr(self.CS, 'v_ego_cluster', 0.0)
+      self.CS.update_adjacent_lanes_from_live_tracks(self.live_tracks, v_ego)
   
   def set_radar_interface(self, radar_interface):
     """Set radar interface reference for adjacent lane tracking (for external use)."""

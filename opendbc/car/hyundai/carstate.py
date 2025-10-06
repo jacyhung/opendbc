@@ -76,6 +76,10 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.left_lane_lead_rear = None
     self.right_lane_lead_rear = None
     
+    # Lane quality from vision (used to gate adjacent lane detection)
+    self.left_lane_quality = 0
+    self.right_lane_quality = 0
+    
     # Track IDs and counts for stability (stick with same vehicle)
     self.left_lane_track_id = None
     self.right_lane_track_id = None
@@ -108,7 +112,14 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         v_ego: Vehicle's own velocity in m/s (used for stationary object filtering)
     """
     if not live_tracks or not hasattr(live_tracks, 'points'):
-      print("[CS] update_adjacent_lanes: No live_tracks or no points")
+      return
+    
+    # SAFETY: Only work at speeds >= 20 mph (8.94 m/s)
+    # At low speeds, too much noise and ambiguity
+    MIN_SPEED_FOR_ADJACENT_LANES = 8.94  # 20 mph
+    if v_ego < MIN_SPEED_FOR_ADJACENT_LANES:
+      self.left_lane_lead = None
+      self.right_lane_lead = None
       return
     
     # Filter valid tracks by lane
@@ -147,15 +158,15 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         # - Slow moving noise (abs(vRel) < 7.0)
       
       # Left lane: tracks beyond left boundary but not too far
+      # ONLY if vision confirms there's a left lane line
       if -self.MAX_LATERAL < pt.yRel < -self.LANE_BOUNDARY:
-        left_lane.append(pt)
-        if v_ego < 0.5:
-          print(f"[CS LEFT] Added to left lane: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s, trackId={pt.trackId}")
-      # Right lane: tracks beyond right boundary but not too far
+        if self.left_lane_quality > 0:  # Vision sees left lane line
+          left_lane.append(pt)
+      # Right lane: tracks beyond right boundary but not too far  
+      # ONLY if vision confirms there's a right lane line
       elif self.LANE_BOUNDARY < pt.yRel < self.MAX_LATERAL:
-        right_lane.append(pt)
-        if v_ego < 0.5:
-          print(f"[CS RIGHT] Added to right lane: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s, trackId={pt.trackId}")
+        if self.right_lane_quality > 0:  # Vision sees right lane line
+          right_lane.append(pt)
     
     # Track stability with count-based filtering (like radard)
     # Only show tracks that have been stable for MIN_TRACK_COUNT frames
@@ -203,19 +214,13 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       same_track = next((pt for pt in all_points if pt.trackId == self.right_lane_track_id), None)
       if same_track:
         self.right_lane_track_count += 1
-        if v_ego < 0.5:
-          print(f"[CS RIGHT TRACK] Tracking {same_track.trackId}, count={self.right_lane_track_count}/{self.MIN_TRACK_COUNT}, dRel={same_track.dRel:.1f}m, yRel={same_track.yRel:+.2f}m")
         if self.right_lane_track_count >= self.MIN_TRACK_COUNT:
           self.right_lane_lead = same_track
         else:
           self.right_lane_lead = None
       else:
-        if v_ego < 0.5:
-          print(f"[CS RIGHT TRACK] Lost track {self.right_lane_track_id}, resetting")
         candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
         if candidate:
-          if v_ego < 0.5:
-            print(f"[CS RIGHT TRACK] New track {candidate.trackId}, starting count")
           self.right_lane_track_id = candidate.trackId
           self.right_lane_track_count = 1
           self.right_lane_lead = None
@@ -226,8 +231,6 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     else:
       candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
       if candidate:
-        if v_ego < 0.5:
-          print(f"[CS RIGHT TRACK] Initial track {candidate.trackId}, starting count")
         self.right_lane_track_id = candidate.trackId
         self.right_lane_track_count = 1
         self.right_lane_lead = None
@@ -437,6 +440,9 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       self.msg_161, self.msg_162, self.msg_1b5 = map(copy.copy, (cp_cam.vl["CCNC_0x161"], cp_cam.vl["CCNC_0x162"], cp_cam.vl["FR_CMR_03_50ms"]))
       self.cruise_info = copy.copy((cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp).vl["SCC_CONTROL"])
       alt = "_ALT"
+      # Update lane quality from vision for adjacent lane detection gating
+      self.left_lane_quality = self.msg_1b5.get("Info_LftLnQualSta", 0)
+      self.right_lane_quality = self.msg_1b5.get("Info_RtLnQualSta", 0)
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][f"LEFT_LAMP{alt}"],
                                                                       cp.vl["BLINKERS"][f"RIGHT_LAMP{alt}"])
     if self.CP.enableBsm:
