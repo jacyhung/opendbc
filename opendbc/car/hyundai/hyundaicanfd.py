@@ -283,23 +283,28 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
   right_lane_quality = msg_1b5.get("Info_RtLnQualSta", 0)
   
   # Get leads from CarState if available, otherwise use legacy parameters
+  print(f"[CCNC DEBUG] CS={CS}, CS is not None={CS is not None}")
   if CS is not None:
+    print(f"[CCNC DEBUG] CS.left_lane_lead={CS.left_lane_lead}, CS.right_lane_lead={CS.right_lane_lead}")
     left_lead = CS.left_lane_lead
     right_lead = CS.right_lane_lead
   else:
+    print(f"[CCNC DEBUG] Using legacy params: left_lane_lead={left_lane_lead}, right_lane_lead={right_lane_lead}")
     left_lead = left_lane_lead
     right_lead = right_lane_lead
+  
+  print(f"[CCNC DEBUG] After assignment: left_lead={left_lead}, right_lead={right_lead}")
+  
+  # DEBUG: Print gating conditions to see what's failing
+  if right_lead is not None or left_lead is not None:
+    print(f"[CCNC] v_ego={v_ego:.1f}m/s ({v_ego*2.237:.1f}mph), L_qual={left_lane_quality}, R_qual={right_lane_quality}, L_lead={'YES' if left_lead else 'NO'}, R_lead={'YES' if right_lead else 'NO'}")
   
   # Left lane lead
   show_left = (v_ego >= MIN_SPEED_FOR_ADJACENT and 
                left_lane_quality > 0 and 
                left_lead is not None)
   
-  # Check if in transition animation (vehicle passing alongside)
-  left_in_transition = CS and CS.left_transition_active if CS else False
-  
-  if show_left and not left_in_transition:
-    # Normal front display
+  if show_left:
     left_dist = min(int(left_lead.dRel * 10), 2047)
     msg_162.update({
       "LEAD_LEFT": 2,
@@ -318,11 +323,7 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
                 right_lane_quality > 0 and 
                 right_lead is not None)
   
-  # Check if in transition animation (vehicle passing alongside)
-  right_in_transition = CS and CS.right_transition_active if CS else False
-  
-  if show_right and not right_in_transition:
-    # Normal front display
+  if show_right:
     right_dist = min(int(right_lead.dRel * 10), 2047)
     msg_162.update({
       "LEAD_RIGHT": 2, 
@@ -336,39 +337,15 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
       "LEAD_RIGHT_LATERAL": 0,
     })
   
-  # REAR signals - animate when vehicle passes alongside
-  # Animation: distance goes from 10 (far) to 1 (close) over TRANSITION_FRAMES
-  if left_in_transition:
-    # Animate distance from 10 to 1
-    progress = CS.left_transition_frame / 20.0  # 20 frames total
-    animated_distance = int(10 - (progress * 9))  # 10 -> 1
-    msg_162.update({
-      "LEAD_LEFT_REAR_STATUS": 2,
-      "LEAD_LEFT_REAR_DISTANCE": max(1, animated_distance),
-      "LEAD_LEFT_REAR_LATERAL": 80,
-    })
-  else:
-    msg_162.update({
-      "LEAD_LEFT_REAR_STATUS": 0,
-      "LEAD_LEFT_REAR_DISTANCE": 0,
-      "LEAD_LEFT_REAR_LATERAL": 0,
-    })
-  
-  if right_in_transition:
-    # Animate distance from 10 to 1
-    progress = CS.right_transition_frame / 20.0  # 20 frames total
-    animated_distance = int(10 - (progress * 9))  # 10 -> 1
-    msg_162.update({
-      "LEAD_RIGHT_REAR_STATUS": 2,
-      "LEAD_RIGHT_REAR_DISTANCE": max(1, animated_distance),
-      "LEAD_RIGHT_REAR_LATERAL": 80,
-    })
-  else:
-    msg_162.update({
-      "LEAD_RIGHT_REAR_STATUS": 0,
-      "LEAD_RIGHT_REAR_DISTANCE": 0,
-      "LEAD_RIGHT_REAR_LATERAL": 0,
-    })
+  # REAR signals - disabled for now
+  msg_162.update({
+    "LEAD_LEFT_REAR_STATUS": 0,
+    "LEAD_LEFT_REAR_DISTANCE": 0,
+    "LEAD_LEFT_REAR_LATERAL": 0,
+    "LEAD_RIGHT_REAR_STATUS": 0,
+    "LEAD_RIGHT_REAR_DISTANCE": 0,
+    "LEAD_RIGHT_REAR_LATERAL": 0,
+  })
 
   return [packer.make_can_msg(msg, CAN.ECAN, data) for msg, data in [("CCNC_0x161", msg_161), ("CCNC_0x162", msg_162)]]
 

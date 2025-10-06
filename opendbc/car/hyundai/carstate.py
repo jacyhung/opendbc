@@ -82,21 +82,13 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.left_lost_frames = 0    # Frames since track was lost
     self.right_lost_frames = 0
     
-    # Transition animation state (when vehicle passes alongside)
-    self.left_transition_active = False
-    self.right_transition_active = False
-    self.left_transition_frame = 0
-    self.right_transition_frame = 0
-    
     # Lane detection thresholds
     self.LANE_BOUNDARY = 1.8     # meters - minimum lateral distance for adjacent lane
     self.MAX_LATERAL = 4.5       # meters - maximum lateral (excludes shoulders/barriers)
-    self.TRANSITION_DISTANCE = 2.0  # meters - distance threshold to trigger rear transition
     
     # Track stability parameters
     self.MIN_TRACK_FRAMES = 5    # Frames before showing new track (0.5s @ 10Hz)
     self.TRACK_LOST_THRESHOLD = 10  # Grace period before switching tracks (1s @ 10Hz)
-    self.TRANSITION_FRAMES = 20  # Animation duration (2s @ 10Hz)
 
     self.params = CarControllerParams(CP)
 
@@ -131,11 +123,11 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       if pt.dRel < 0.5 or pt.dRel > 150.0:  # Ignore very close or very far
         continue
       
-      # Filter out stationary objects (trees, signs, barriers)
-      # A stationary object has vRel ≈ -v_ego (moving away at ego's speed)
-      # Allow 2 m/s tolerance for measurement noise
-      if abs(pt.vRel + v_ego) < 2.0:
-        continue  # Skip stationary objects
+      # Filter out stationary and oncoming objects
+      # Object ground speed = v_ego + vRel
+      # If ground speed < 2 m/s, it's either stationary or oncoming (wrong direction)
+      if v_ego + pt.vRel < 2.0:
+        continue  # Skip stationary and oncoming vehicles
       
       # Assign to lane based on lateral position
       # Radar convention: negative yRel = RIGHT side, positive yRel = LEFT side
@@ -163,9 +155,6 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       lost_frames_attr='right_lost_frames',
       lead_attr='right_lane_lead'
     )
-    
-    # Check for transition to rear (when vehicle passes alongside)
-    self._update_transitions()
   
   def _update_lane_lead(self, lane_points, track_id_attr, track_frames_attr, lost_frames_attr, lead_attr):
     """
@@ -239,39 +228,6 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       setattr(self, track_frames_attr, 0)
       setattr(self, lost_frames_attr, 0)
       setattr(self, lead_attr, None)
-  
-  def _update_transitions(self):
-    """
-    Update transition animations for vehicles passing alongside.
-    When a tracked vehicle gets very close (< 2m), trigger rear animation.
-    """
-    # Left lane transition
-    if self.left_lane_lead and self.left_lane_lead.dRel < self.TRANSITION_DISTANCE:
-      if not self.left_transition_active:
-        # Start transition
-        self.left_transition_active = True
-        self.left_transition_frame = 0
-    
-    if self.left_transition_active:
-      self.left_transition_frame += 1
-      if self.left_transition_frame >= self.TRANSITION_FRAMES:
-        # Animation complete, reset
-        self.left_transition_active = False
-        self.left_transition_frame = 0
-    
-    # Right lane transition
-    if self.right_lane_lead and self.right_lane_lead.dRel < self.TRANSITION_DISTANCE:
-      if not self.right_transition_active:
-        # Start transition
-        self.right_transition_active = True
-        self.right_transition_frame = 0
-    
-    if self.right_transition_active:
-      self.right_transition_frame += 1
-      if self.right_transition_frame >= self.TRANSITION_FRAMES:
-        # Animation complete, reset
-        self.right_transition_active = False
-        self.right_transition_frame = 0
 
   def recent_button_interaction(self) -> bool:
     # On some newer model years, the CANCEL button acts as a pause/resume button based on the PCM state
