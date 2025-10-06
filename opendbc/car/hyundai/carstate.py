@@ -192,8 +192,9 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         else:
           self.left_lane_lead = None  # Not confident yet
       else:
-        # Track not found - increment lost count
+        # Track not found - increment lost count and CLEAR lead
         self.left_lane_lost_count += 1
+        self.left_lane_lead = None  # Don't show stale data
         if self.left_lane_lost_count > self.MAX_LOST_COUNT:
           # Track truly lost - find new closest in left lane
           candidate = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
@@ -207,7 +208,6 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
             self.left_lane_track_count = 0
             self.left_lane_lost_count = 0
             self.left_lane_lead = None
-        # else: keep showing old lead for now (sticky tracking)
     else:
       # No current track, find closest in left lane and start counting
       candidate = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
@@ -233,8 +233,9 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         else:
           self.right_lane_lead = None
       else:
-        # Track not found - increment lost count
+        # Track not found - increment lost count and CLEAR lead
         self.right_lane_lost_count += 1
+        self.right_lane_lead = None  # Don't show stale data
         if self.right_lane_lost_count > self.MAX_LOST_COUNT:
           # Track truly lost - find new one
           candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
@@ -248,7 +249,6 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
             self.right_lane_track_count = 0
             self.right_lane_lost_count = 0
             self.right_lane_lead = None
-        # else: keep showing old lead for now (sticky tracking)
     else:
       # No current track - find closest in right lane
       candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
