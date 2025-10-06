@@ -295,13 +295,16 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
                left_lane_quality > 0 and 
                left_lead is not None)
   
-  if show_left:
+  # Check if in transition animation (vehicle passing alongside)
+  left_in_transition = CS and CS.left_transition_active if CS else False
+  
+  if show_left and not left_in_transition:
+    # Normal front display
     left_dist = min(int(left_lead.dRel * 10), 2047)
-    left_lat = min(int(abs(left_lead.yRel) * 10), 127)  # Lateral in 0.1m units
     msg_162.update({
       "LEAD_LEFT": 2,
       "LEAD_LEFT_DISTANCE": left_dist,
-      "LEAD_LEFT_LATERAL": left_lat,
+      "LEAD_LEFT_LATERAL": 80,  # Fixed at 80 (8.0m)
     })
   else:
     msg_162.update({
@@ -315,13 +318,16 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
                 right_lane_quality > 0 and 
                 right_lead is not None)
   
-  if show_right:
+  # Check if in transition animation (vehicle passing alongside)
+  right_in_transition = CS and CS.right_transition_active if CS else False
+  
+  if show_right and not right_in_transition:
+    # Normal front display
     right_dist = min(int(right_lead.dRel * 10), 2047)
-    right_lat = min(int(right_lead.yRel * 10), 127)  # Lateral in 0.1m units
     msg_162.update({
       "LEAD_RIGHT": 2, 
       "LEAD_RIGHT_DISTANCE": right_dist,
-      "LEAD_RIGHT_LATERAL": right_lat,
+      "LEAD_RIGHT_LATERAL": 80,  # Fixed at 80 (8.0m)
     })
   else:
     msg_162.update({
@@ -330,15 +336,39 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
       "LEAD_RIGHT_LATERAL": 0,
     })
   
-  # REAR signals - disabled for now
-  msg_162.update({
-    "LEAD_LEFT_REAR_STATUS": 0,
-    "LEAD_LEFT_REAR_DISTANCE": 0,
-    "LEAD_LEFT_REAR_LATERAL": 0,
-    "LEAD_RIGHT_REAR_STATUS": 0,
-    "LEAD_RIGHT_REAR_DISTANCE": 0,
-    "LEAD_RIGHT_REAR_LATERAL": 0,
-  })
+  # REAR signals - animate when vehicle passes alongside
+  # Animation: distance goes from 10 (far) to 1 (close) over TRANSITION_FRAMES
+  if left_in_transition:
+    # Animate distance from 10 to 1
+    progress = CS.left_transition_frame / 20.0  # 20 frames total
+    animated_distance = int(10 - (progress * 9))  # 10 -> 1
+    msg_162.update({
+      "LEAD_LEFT_REAR_STATUS": 2,
+      "LEAD_LEFT_REAR_DISTANCE": max(1, animated_distance),
+      "LEAD_LEFT_REAR_LATERAL": 80,
+    })
+  else:
+    msg_162.update({
+      "LEAD_LEFT_REAR_STATUS": 0,
+      "LEAD_LEFT_REAR_DISTANCE": 0,
+      "LEAD_LEFT_REAR_LATERAL": 0,
+    })
+  
+  if right_in_transition:
+    # Animate distance from 10 to 1
+    progress = CS.right_transition_frame / 20.0  # 20 frames total
+    animated_distance = int(10 - (progress * 9))  # 10 -> 1
+    msg_162.update({
+      "LEAD_RIGHT_REAR_STATUS": 2,
+      "LEAD_RIGHT_REAR_DISTANCE": max(1, animated_distance),
+      "LEAD_RIGHT_REAR_LATERAL": 80,
+    })
+  else:
+    msg_162.update({
+      "LEAD_RIGHT_REAR_STATUS": 0,
+      "LEAD_RIGHT_REAR_DISTANCE": 0,
+      "LEAD_RIGHT_REAR_LATERAL": 0,
+    })
 
   return [packer.make_can_msg(msg, CAN.ECAN, data) for msg, data in [("CCNC_0x161", msg_161), ("CCNC_0x162", msg_162)]]
 
