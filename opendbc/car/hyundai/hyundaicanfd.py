@@ -133,7 +133,7 @@ def create_lfahda_cluster(packer, CAN, enabled, lfa_icon):
 
 
 def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBlinker, rightBlinker, msg_161, msg_162, msg_1b5,
-                is_metric, main_cruise_enabled, out, lfa_icon, left_lane_lead=None, right_lane_lead=None,
+                is_metric, main_cruise_enabled, out, lfa_icon, CS=None, left_lane_lead=None, right_lane_lead=None,
                 left_lane_lead_rear=None, right_lane_lead_rear=None):
   for f in {"FAULT_LSS", "FAULT_HDA", "FAULT_DAS", "FAULT_LFA", "FAULT_DAW", "FAULT_ESS"}:
     msg_162[f] = 0
@@ -271,37 +271,66 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
     msg_162["LEAD"] = 0 if not main_cruise_enabled else 2 if enabled else 1
     msg_162["LEAD_DISTANCE"] = msg_1b5["Longitudinal_Distance"]
 
-  # Adjacent lane leads (left and right) - FAR vehicles
-  if left_lane_lead is not None:
-    left_dist = min(int(left_lane_lead.dRel * 10), 2047)
+  # Adjacent lane detection with gating
+  # Only show when: 1) speed >= 20mph, 2) lane quality > 0, 3) lead exists
+  MIN_SPEED_FOR_ADJACENT = 8.94  # 20 mph in m/s
+  
+  # Get gating conditions
+  v_ego = out.vEgo
+  
+  # Get lane quality directly from msg_1b5 (0 = bad, >0 = good)
+  left_lane_quality = msg_1b5.get("Info_LftLnQualSta", 0)
+  right_lane_quality = msg_1b5.get("Info_RtLnQualSta", 0)
+  
+  # Get leads from CarState if available, otherwise use legacy parameters
+  if CS is not None:
+    left_lead = CS.left_lane_lead
+    right_lead = CS.right_lane_lead
+  else:
+    left_lead = left_lane_lead
+    right_lead = right_lane_lead
+  
+  # Left lane lead
+  show_left = (v_ego >= MIN_SPEED_FOR_ADJACENT and 
+               left_lane_quality > 0 and 
+               left_lead is not None)
+  
+  if show_left:
+    left_dist = min(int(left_lead.dRel * 10), 2047)
+    left_lat = min(int(abs(left_lead.yRel) * 10), 127)  # Lateral in 0.1m units
     msg_162.update({
       "LEAD_LEFT": 2,
       "LEAD_LEFT_DISTANCE": left_dist,
-      "LEAD_LEFT_LATERAL": 80,
+      "LEAD_LEFT_LATERAL": left_lat,
     })
   else:
     msg_162.update({
-      "LEAD_LEFT": 0,  # HIDDEN
+      "LEAD_LEFT": 0,
       "LEAD_LEFT_DISTANCE": 0,
       "LEAD_LEFT_LATERAL": 0,
     })
   
-  # Right lane lead - FAR vehicles
-  if right_lane_lead is not None:
-    right_dist = min(int(right_lane_lead.dRel * 10), 2047)
+  # Right lane lead
+  show_right = (v_ego >= MIN_SPEED_FOR_ADJACENT and 
+                right_lane_quality > 0 and 
+                right_lead is not None)
+  
+  if show_right:
+    right_dist = min(int(right_lead.dRel * 10), 2047)
+    right_lat = min(int(right_lead.yRel * 10), 127)  # Lateral in 0.1m units
     msg_162.update({
       "LEAD_RIGHT": 2, 
       "LEAD_RIGHT_DISTANCE": right_dist,
-      "LEAD_RIGHT_LATERAL": 80,
+      "LEAD_RIGHT_LATERAL": right_lat,
     })
   else:
     msg_162.update({
-      "LEAD_RIGHT": 0,  # HIDDEN
+      "LEAD_RIGHT": 0,
       "LEAD_RIGHT_DISTANCE": 0,
       "LEAD_RIGHT_LATERAL": 0,
     })
   
-  # REAR signals - disabled (direction logic unclear)
+  # REAR signals - disabled for now
   msg_162.update({
     "LEAD_LEFT_REAR_STATUS": 0,
     "LEAD_LEFT_REAR_DISTANCE": 0,

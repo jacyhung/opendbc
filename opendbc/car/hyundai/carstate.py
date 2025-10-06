@@ -73,29 +73,22 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     # Adjacent lane radar tracking
     self.left_lane_lead = None
     self.right_lane_lead = None
-    self.left_lane_lead_rear = None
-    self.right_lane_lead_rear = None
     
-    # Lane quality from vision (used to gate adjacent lane detection)
-    self.left_lane_quality = 0
-    self.right_lane_quality = 0
+    # Tracking state for stability
+    self.left_track_id = None
+    self.right_track_id = None
+    self.left_track_frames = 0   # Consecutive frames tracking this vehicle
+    self.right_track_frames = 0
+    self.left_lost_frames = 0    # Frames since track was lost
+    self.right_lost_frames = 0
     
-    # Track IDs and counts for stability (stick with same vehicle)
-    self.left_lane_track_id = None
-    self.right_lane_track_id = None
-    self.left_lane_track_count = 0  # How many frames we've seen this track
-    self.right_lane_track_count = 0
-    self.left_lane_lost_count = 0  # Frames since track was lost
-    self.right_lane_lost_count = 0
-    self.MIN_TRACK_COUNT = 5  # Require 0.5 seconds of stability (fast enough to catch cars)
-    self.MAX_LOST_COUNT = 10  # Allow track to be lost for 1 second before switching
+    # Lane detection thresholds
+    self.LANE_BOUNDARY = 1.8     # meters - minimum lateral distance for adjacent lane
+    self.MAX_LATERAL = 4.5       # meters - maximum lateral (excludes shoulders/barriers)
     
-    # Lane thresholds for adjacent lane detection
-    self.LANE_BOUNDARY = 1.8  # Minimum lateral distance to be considered adjacent lane
-    self.MAX_LATERAL = 4.5  # Maximum lateral distance (tighter to exclude shoulders)
-    # REAR signals are for blind spot area: vehicles beside/behind you (negative dRel or very close)
-    self.REAR_DISTANCE_MAX = 10.0  # meters - max distance for REAR signals (1-10m range)
-    self.MIN_RELATIVE_VELOCITY = -30.0  # m/s - minimum relative velocity to consider (filters stationary objects)
+    # Track stability parameters
+    self.MIN_TRACK_FRAMES = 5    # Frames before showing new track (0.5s @ 10Hz)
+    self.TRACK_LOST_THRESHOLD = 10  # Grace period before switching tracks (1s @ 10Hz)
 
     self.params = CarControllerParams(CP)
 
@@ -108,24 +101,16 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
   def update_adjacent_lanes_from_live_tracks(self, live_tracks, v_ego=0.0):
     """
     Update adjacent lane leads from liveTracks message (published by radard).
-    This is called from openpilot's control loop with sm['liveTracks'].
+    Uses sticky tracking to lock onto adjacent lane vehicles and track them consistently.
     
     Args:
         live_tracks: RadarData message with radar points
-        v_ego: Vehicle's own velocity in m/s (used for stationary object filtering)
+        v_ego: Vehicle's own velocity in m/s (unused here, gating done in display layer)
     """
     if not live_tracks or not hasattr(live_tracks, 'points'):
       return
     
-    # SAFETY: Only work at speeds >= 20 mph (8.94 m/s)
-    # At low speeds, too much noise and ambiguity
-    MIN_SPEED_FOR_ADJACENT_LANES = 8.94  # 20 mph
-    if v_ego < MIN_SPEED_FOR_ADJACENT_LANES:
-      self.left_lane_lead = None
-      self.right_lane_lead = None
-      return
-    
-    # Filter valid tracks by lane
+    # Filter points by lateral position
     left_lane = []
     right_lane = []
     
@@ -133,140 +118,108 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       if not pt.measured:
         continue
       
-      # ============ SIMPLE, CLEAR FILTERING ============
-      
-      # Filter 1: Basic sanity - remove obvious glitches
-      if pt.dRel < 0.75 or pt.dRel > 200.0:
+      # Basic sanity filters
+      if pt.dRel < 0.5 or pt.dRel > 150.0:  # Ignore very close or very far
         continue
       
-      # Filter 2: Must be in adjacent lane area
-      if abs(pt.yRel) < self.LANE_BOUNDARY or abs(pt.yRel) > self.MAX_LATERAL:
-        continue
-      
-      # Filter 3: Velocity-based (only when moving or stopped)
-      if v_ego > 1.0:  # We're moving
-        # Real vehicles will have vRel significantly different from 0
-        # Walls/barriers will have vRel ≈ 0
-        if abs(pt.vRel) < 1.0:  # Stationary - wall/barrier
-          continue
-      else:  # We're stopped (v_ego < 1.0)
-        # When stopped, EVERYTHING has stable trackIds (walls, signs, parked cars)
-        # The ONLY way to identify real passing cars is by velocity
-        # Real cars passing = at least 25 km/h = 7 m/s
-        if pt.vRel > -7.0:  # Not moving away fast enough (< 25 km/h)
-          continue
-        # This filters:
-        # - Stationary objects (vRel = 0)
-        # - Approaching vehicles (vRel > 0) 
-        # - Slow moving noise (abs(vRel) < 7.0)
-      
-      # Left lane: tracks beyond left boundary but not too far
-      # ONLY if vision confirms there's a left lane line
+      # Assign to lane based on lateral position
       if -self.MAX_LATERAL < pt.yRel < -self.LANE_BOUNDARY:
-        if self.left_lane_quality > 0:  # Vision sees left lane line
-          left_lane.append(pt)
-      # Right lane: tracks beyond right boundary but not too far  
-      # ONLY if vision confirms there's a right lane line
+        # Left lane (negative yRel = left side)
+        left_lane.append(pt)
       elif self.LANE_BOUNDARY < pt.yRel < self.MAX_LATERAL:
-        if self.right_lane_quality > 0:  # Vision sees right lane line
-          right_lane.append(pt)
+        # Right lane (positive yRel = right side)
+        right_lane.append(pt)
     
-    # Track stability with count-based filtering (like radard)
-    # Only show tracks that have been stable for MIN_TRACK_COUNT frames
-    # This filters out noise/glitches that appear for 1-2 frames
+    # Update left lane tracking
+    self._update_lane_lead(
+      lane_points=left_lane,
+      track_id_attr='left_track_id',
+      track_frames_attr='left_track_frames',
+      lost_frames_attr='left_lost_frames',
+      lead_attr='left_lane_lead'
+    )
     
-    # Left lane: Check if our current track is still valid
-    # ONLY search within left_lane to prevent cross-contamination
-    if self.left_lane_track_id is not None:
-      # Search ONLY in left_lane (not right_lane to prevent wrong-side tracking)
-      same_track = next((pt for pt in left_lane if pt.trackId == self.left_lane_track_id), None)
-      if same_track:
-        # Track found - reset lost count and continue
-        self.left_lane_lost_count = 0
-        self.left_lane_track_count += 1
-        # Only show if we've seen it enough times (filters noise)
-        if self.left_lane_track_count >= self.MIN_TRACK_COUNT:
-          self.left_lane_lead = same_track
+    # Update right lane tracking
+    self._update_lane_lead(
+      lane_points=right_lane,
+      track_id_attr='right_track_id',
+      track_frames_attr='right_track_frames',
+      lost_frames_attr='right_lost_frames',
+      lead_attr='right_lane_lead'
+    )
+  
+  def _update_lane_lead(self, lane_points, track_id_attr, track_frames_attr, lost_frames_attr, lead_attr):
+    """
+    Update tracking for a single lane (left or right).
+    Implements sticky tracking: locks onto a vehicle and follows it until truly lost.
+    
+    Args:
+        lane_points: List of radar points in this lane
+        track_id_attr: Name of attribute storing current track ID (e.g., 'left_track_id')
+        track_frames_attr: Name of attribute for frame counter
+        lost_frames_attr: Name of attribute for lost frame counter
+        lead_attr: Name of attribute for the lead output (e.g., 'left_lane_lead')
+    """
+    current_track_id = getattr(self, track_id_attr)
+    track_frames = getattr(self, track_frames_attr)
+    lost_frames = getattr(self, lost_frames_attr)
+    
+    if current_track_id is not None:
+      # We're currently tracking a vehicle - look for it
+      tracked_point = next((pt for pt in lane_points if pt.trackId == current_track_id), None)
+      
+      if tracked_point:
+        # Track found - reset lost counter, increment seen counter
+        setattr(self, lost_frames_attr, 0)
+        track_frames += 1
+        setattr(self, track_frames_attr, track_frames)
+        
+        # Only show lead if we've tracked it long enough (anti-flicker)
+        if track_frames >= self.MIN_TRACK_FRAMES:
+          setattr(self, lead_attr, tracked_point)
         else:
-          self.left_lane_lead = None  # Not confident yet
+          setattr(self, lead_attr, None)
+      
       else:
-        # Track not found - increment lost count and CLEAR lead
-        self.left_lane_lost_count += 1
-        self.left_lane_lead = None  # Don't show stale data
-        if self.left_lane_lost_count > self.MAX_LOST_COUNT:
-          # Track truly lost - find new closest in left lane
-          candidate = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
-          if candidate:
-            self.left_lane_track_id = candidate.trackId
-            self.left_lane_track_count = 1
-            self.left_lane_lost_count = 0
-            self.left_lane_lead = None  # Don't show until MIN_TRACK_COUNT
-          else:
-            self.left_lane_track_id = None
-            self.left_lane_track_count = 0
-            self.left_lane_lost_count = 0
-            self.left_lane_lead = None
+        # Track not found - increment lost counter
+        lost_frames += 1
+        setattr(self, lost_frames_attr, lost_frames)
+        
+        # Clear lead immediately (don't show stale data)
+        setattr(self, lead_attr, None)
+        
+        # If lost for too long, find a new track
+        if lost_frames > self.TRACK_LOST_THRESHOLD:
+          self._acquire_new_track(lane_points, track_id_attr, track_frames_attr, lost_frames_attr, lead_attr)
+    
     else:
-      # No current track, find closest in left lane and start counting
-      candidate = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
-      if candidate:
-        self.left_lane_track_id = candidate.trackId
-        self.left_lane_track_count = 1
-        self.left_lane_lost_count = 0
-        self.left_lane_lead = None  # Don't show until MIN_TRACK_COUNT
-      else:
-        self.left_lane_lead = None
+      # No current track - acquire new one
+      self._acquire_new_track(lane_points, track_id_attr, track_frames_attr, lost_frames_attr, lead_attr)
+  
+  def _acquire_new_track(self, lane_points, track_id_attr, track_frames_attr, lost_frames_attr, lead_attr):
+    """
+    Acquire a new track (find closest vehicle in lane).
     
-    # Right lane: Same logic - ONLY search within right_lane
-    if self.right_lane_track_id is not None:
-      # Search ONLY in right_lane (not left_lane to prevent wrong-side tracking)
-      same_track = next((pt for pt in right_lane if pt.trackId == self.right_lane_track_id), None)
-      if same_track:
-        # Track found - reset lost count and continue
-        self.right_lane_lost_count = 0
-        self.right_lane_track_count += 1
-        if self.right_lane_track_count >= self.MIN_TRACK_COUNT:
-          self.right_lane_lead = same_track
-        else:
-          self.right_lane_lead = None
-      else:
-        # Track not found - increment lost count and CLEAR lead
-        self.right_lane_lost_count += 1
-        self.right_lane_lead = None  # Don't show stale data
-        if self.right_lane_lost_count > self.MAX_LOST_COUNT:
-          # Track truly lost - find new one
-          candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
-          if candidate:
-            self.right_lane_track_id = candidate.trackId
-            self.right_lane_track_count = 1
-            self.right_lane_lost_count = 0
-            self.right_lane_lead = None
-          else:
-            self.right_lane_track_id = None
-            self.right_lane_track_count = 0
-            self.right_lane_lost_count = 0
-            self.right_lane_lead = None
+    Args:
+        lane_points: List of radar points in this lane
+        track_id_attr: Name of attribute storing current track ID
+        track_frames_attr: Name of attribute for frame counter
+        lost_frames_attr: Name of attribute for lost frame counter
+        lead_attr: Name of attribute for the lead output
+    """
+    if lane_points:
+      # Find closest vehicle (minimum dRel)
+      closest = min(lane_points, key=lambda pt: pt.dRel)
+      setattr(self, track_id_attr, closest.trackId)
+      setattr(self, track_frames_attr, 1)
+      setattr(self, lost_frames_attr, 0)
+      setattr(self, lead_attr, None)  # Don't show until MIN_TRACK_FRAMES
     else:
-      # No current track - find closest in right lane
-      candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
-      if candidate:
-        self.right_lane_track_id = candidate.trackId
-        self.right_lane_track_count = 1
-        self.right_lane_lost_count = 0
-        self.right_lane_lead = None
-      else:
-        self.right_lane_lead = None
-    
-    # REAR signals disabled for now
-    self.left_lane_lead_rear = None
-    self.right_lane_lead_rear = None
-    
-    # Minimal debug output (only when leads change)
-    # Uncomment for debugging:
-    # if self.left_lane_lead:
-    #   print(f"[CS] LEFT: {self.left_lane_lead.dRel:.1f}m @ {self.left_lane_lead.yRel:.2f}m")
-    # if self.right_lane_lead:
-    #   print(f"[CS] RIGHT: {self.right_lane_lead.dRel:.1f}m @ {self.right_lane_lead.yRel:.2f}m")
+      # No vehicles in lane
+      setattr(self, track_id_attr, None)
+      setattr(self, track_frames_attr, 0)
+      setattr(self, lost_frames_attr, 0)
+      setattr(self, lead_attr, None)
 
   def recent_button_interaction(self) -> bool:
     # On some newer model years, the CANCEL button acts as a pause/resume button based on the PCM state
@@ -460,9 +413,6 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       self.msg_161, self.msg_162, self.msg_1b5 = map(copy.copy, (cp_cam.vl["CCNC_0x161"], cp_cam.vl["CCNC_0x162"], cp_cam.vl["FR_CMR_03_50ms"]))
       self.cruise_info = copy.copy((cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp).vl["SCC_CONTROL"])
       alt = "_ALT"
-      # Update lane quality from vision for adjacent lane detection gating
-      self.left_lane_quality = self.msg_1b5.get("Info_LftLnQualSta", 0)
-      self.right_lane_quality = self.msg_1b5.get("Info_RtLnQualSta", 0)
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][f"LEFT_LAMP{alt}"],
                                                                       cp.vl["BLINKERS"][f"RIGHT_LAMP{alt}"])
     if self.CP.enableBsm:
