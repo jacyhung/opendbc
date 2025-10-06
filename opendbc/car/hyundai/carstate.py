@@ -81,11 +81,11 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.right_lane_track_id = None
     self.left_lane_track_count = 0  # How many frames we've seen this track
     self.right_lane_track_count = 0
-    self.MIN_TRACK_COUNT = 15  # Require 1.5 seconds of stability - noise won't last this long
+    self.MIN_TRACK_COUNT = 5  # Require 0.5 seconds of stability (fast enough to catch cars)
     
     # Lane thresholds for adjacent lane detection
-    self.LANE_BOUNDARY = 1.5  # Minimum lateral distance to be considered adjacent lane
-    self.MAX_LATERAL = 10.0  # Maximum lateral distance (generous for radar cone)
+    self.LANE_BOUNDARY = 1.8  # Minimum lateral distance to be considered adjacent lane
+    self.MAX_LATERAL = 4.5  # Maximum lateral distance (tighter to exclude shoulders)
     # REAR signals are for blind spot area: vehicles beside/behind you (negative dRel or very close)
     self.REAR_DISTANCE_MAX = 10.0  # meters - max distance for REAR signals (1-10m range)
     self.MIN_RELATIVE_VELOCITY = -30.0  # m/s - minimum relative velocity to consider (filters stationary objects)
@@ -203,13 +203,19 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       same_track = next((pt for pt in all_points if pt.trackId == self.right_lane_track_id), None)
       if same_track:
         self.right_lane_track_count += 1
+        if v_ego < 0.5:
+          print(f"[CS RIGHT TRACK] Tracking {same_track.trackId}, count={self.right_lane_track_count}/{self.MIN_TRACK_COUNT}, dRel={same_track.dRel:.1f}m, yRel={same_track.yRel:+.2f}m")
         if self.right_lane_track_count >= self.MIN_TRACK_COUNT:
           self.right_lane_lead = same_track
         else:
           self.right_lane_lead = None
       else:
+        if v_ego < 0.5:
+          print(f"[CS RIGHT TRACK] Lost track {self.right_lane_track_id}, resetting")
         candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
         if candidate:
+          if v_ego < 0.5:
+            print(f"[CS RIGHT TRACK] New track {candidate.trackId}, starting count")
           self.right_lane_track_id = candidate.trackId
           self.right_lane_track_count = 1
           self.right_lane_lead = None
@@ -220,6 +226,8 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     else:
       candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
       if candidate:
+        if v_ego < 0.5:
+          print(f"[CS RIGHT TRACK] Initial track {candidate.trackId}, starting count")
         self.right_lane_track_id = candidate.trackId
         self.right_lane_track_count = 1
         self.right_lane_lead = None
