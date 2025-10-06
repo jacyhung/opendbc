@@ -81,7 +81,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.right_lane_track_id = None
     self.left_lane_track_count = 0  # How many frames we've seen this track
     self.right_lane_track_count = 0
-    self.MIN_TRACK_COUNT = 5  # Minimum frames before we trust a track (0.5s at 10Hz)
+    self.MIN_TRACK_COUNT = 10  # Minimum frames before we trust a track (1.0s at 10Hz) - increased to filter noise
     
     # Lane thresholds for adjacent lane detection
     self.LANE_BOUNDARY = 1.5  # Reduced from 1.8 to catch vehicles closer to lane line
@@ -150,9 +150,13 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       # Left lane: tracks beyond left boundary but not too far
       if -self.MAX_LATERAL < pt.yRel < -self.LANE_BOUNDARY:
         left_lane.append(pt)
+        if v_ego < 0.5:
+          print(f"[CS LEFT] Added to left lane: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s, trackId={pt.trackId}")
       # Right lane: tracks beyond right boundary but not too far
       elif self.LANE_BOUNDARY < pt.yRel < self.MAX_LATERAL:
         right_lane.append(pt)
+        if v_ego < 0.5:
+          print(f"[CS RIGHT] Added to right lane: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s, trackId={pt.trackId}")
     
     # Track stability with count-based filtering (like radard)
     # Only show tracks that have been stable for MIN_TRACK_COUNT frames
