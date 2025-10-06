@@ -81,7 +81,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.right_lane_track_id = None
     self.left_lane_track_count = 0  # How many frames we've seen this track
     self.right_lane_track_count = 0
-    self.MIN_TRACK_COUNT = 10  # Minimum frames before we trust a track (filters noise) - increased from 5
+    self.MIN_TRACK_COUNT = 5  # Minimum frames before we trust a track (0.5s at 10Hz)
     
     # Lane thresholds for adjacent lane detection
     self.LANE_BOUNDARY = 1.8
@@ -119,43 +119,20 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       if not pt.measured:
         continue
       
-      # ULTRA AGGRESSIVE FILTERING - only accept clear, stable vehicle tracks
+      # Simple filtering like openpilot's lead detection
       
-      # Filter 1: Distance range - real adjacent vehicles are in a specific range
-      if pt.dRel < 1.0:  # Too close - likely floor reflection or own car
-        continue
-      if pt.dRel > 80.0:  # Too far - likely distant barriers
+      # Filter 1: Distance sanity check
+      # Radar points closer than 0.75m are almost always glitches (from radard.py)
+      if pt.dRel < 0.75:
         continue
       
-      # Filter 2: Velocity-based (STRICT)
-      if v_ego > 3.0:  # Moving at speed
-        # Real vehicles: vRel should be strongly negative (approaching)
-        if pt.vRel > -3.0:  # Not approaching fast enough - likely stationary object
+      # Filter 2: Velocity-based filtering (when moving)
+      if v_ego > 1.0:  # Moving
+        # Stationary objects should have vRel close to -v_ego
+        # Real vehicles will have different vRel
+        # Filter out things that are clearly stationary (vRel ≈ 0 when we're moving)
+        if pt.vRel > -0.5:  # Nearly stationary - likely wall/barrier
           continue
-      elif v_ego > 1.0:  # Slow speed
-        if pt.vRel > -1.5:  # Stationary when we're moving
-          continue
-      else:  # Stopped or very slow
-        # When stopped, DON'T show anything - too much noise
-        continue
-      
-      # Filter 3: Lateral position - must be clearly in adjacent lane
-      if abs(pt.yRel) < self.LANE_BOUNDARY + 0.5:  # Too close to center - might be in our lane
-        continue
-      if abs(pt.yRel) > self.MAX_LATERAL - 0.5:  # Too far - likely barrier
-        continue
-      
-      # Filter 4: Check if this point is ISOLATED (real cars are single points, not clusters)
-      # Count how many other points are near this one
-      nearby_count = sum(1 for other in live_tracks.points 
-                        if other.trackId != pt.trackId 
-                        and abs(other.dRel - pt.dRel) < 5.0  # Within 5m distance
-                        and abs(other.yRel - pt.yRel) < 1.0)  # Within 1m lateral
-      
-      # If there are many nearby points, it's likely a cluster of noise (wall/parked cars)
-      # Real vehicles appear as a single, isolated point
-      if nearby_count > 2:  # More than 2 nearby points = noise cluster
-        continue
       
       # Left lane: tracks beyond left boundary but not too far
       if -self.MAX_LATERAL < pt.yRel < -self.LANE_BOUNDARY:
