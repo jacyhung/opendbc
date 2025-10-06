@@ -84,7 +84,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.MIN_TRACK_COUNT = 5  # Minimum frames before we trust a track (0.5s at 10Hz)
     
     # Lane thresholds for adjacent lane detection
-    self.LANE_BOUNDARY = 1.8
+    self.LANE_BOUNDARY = 1.5  # Reduced from 1.8 to catch vehicles closer to lane line
     self.MAX_LATERAL = 5.5
     # REAR signals are for blind spot area: vehicles beside/behind you (negative dRel or very close)
     self.REAR_DISTANCE_MAX = 10.0  # meters - max distance for REAR signals (1-10m range)
