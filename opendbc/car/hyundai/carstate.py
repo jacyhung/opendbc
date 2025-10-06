@@ -85,7 +85,10 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.right_lane_track_id = None
     self.left_lane_track_count = 0  # How many frames we've seen this track
     self.right_lane_track_count = 0
+    self.left_lane_lost_count = 0  # Frames since track was lost
+    self.right_lane_lost_count = 0
     self.MIN_TRACK_COUNT = 5  # Require 0.5 seconds of stability (fast enough to catch cars)
+    self.MAX_LOST_COUNT = 10  # Allow track to be lost for 1 second before switching
     
     # Lane thresholds for adjacent lane detection
     self.LANE_BOUNDARY = 1.8  # Minimum lateral distance to be considered adjacent lane
@@ -180,7 +183,8 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       all_points = left_lane + right_lane
       same_track = next((pt for pt in all_points if pt.trackId == self.left_lane_track_id), None)
       if same_track:
-        # Same track still exists, increment count
+        # Track found - reset lost count and continue
+        self.left_lane_lost_count = 0
         self.left_lane_track_count += 1
         # Only show if we've seen it enough times (filters noise)
         if self.left_lane_track_count >= self.MIN_TRACK_COUNT:
@@ -188,51 +192,70 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         else:
           self.left_lane_lead = None  # Not confident yet
       else:
-        # Track lost, reset and find new closest in left lane
-        candidate = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
-        if candidate:
-          self.left_lane_track_id = candidate.trackId
-          self.left_lane_track_count = 1  # Start counting
-          self.left_lane_lead = None  # Don't show until MIN_TRACK_COUNT
-        else:
-          self.left_lane_track_id = None
-          self.left_lane_track_count = 0
-          self.left_lane_lead = None
+        # Track not found - increment lost count
+        self.left_lane_lost_count += 1
+        if self.left_lane_lost_count > self.MAX_LOST_COUNT:
+          # Track truly lost - find new closest in left lane
+          candidate = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
+          if candidate:
+            self.left_lane_track_id = candidate.trackId
+            self.left_lane_track_count = 1
+            self.left_lane_lost_count = 0
+            self.left_lane_lead = None  # Don't show until MIN_TRACK_COUNT
+          else:
+            self.left_lane_track_id = None
+            self.left_lane_track_count = 0
+            self.left_lane_lost_count = 0
+            self.left_lane_lead = None
+        # else: keep showing old lead for now (sticky tracking)
     else:
       # No current track, find closest in left lane and start counting
       candidate = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
       if candidate:
         self.left_lane_track_id = candidate.trackId
         self.left_lane_track_count = 1
+        self.left_lane_lost_count = 0
         self.left_lane_lead = None  # Don't show until MIN_TRACK_COUNT
       else:
         self.left_lane_lead = None
     
-    # Right lane: Same logic - search all points due to cone geometry
+    # Right lane: Same logic with lost count to prevent thrashing
     if self.right_lane_track_id is not None:
+      # Search ALL points (track may move between left/right due to cone geometry)
       all_points = left_lane + right_lane
       same_track = next((pt for pt in all_points if pt.trackId == self.right_lane_track_id), None)
       if same_track:
+        # Track found - reset lost count and continue
+        self.right_lane_lost_count = 0
         self.right_lane_track_count += 1
         if self.right_lane_track_count >= self.MIN_TRACK_COUNT:
           self.right_lane_lead = same_track
         else:
           self.right_lane_lead = None
       else:
-        candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
-        if candidate:
-          self.right_lane_track_id = candidate.trackId
-          self.right_lane_track_count = 1
-          self.right_lane_lead = None
-        else:
-          self.right_lane_track_id = None
-          self.right_lane_track_count = 0
-          self.right_lane_lead = None
+        # Track not found - increment lost count
+        self.right_lane_lost_count += 1
+        if self.right_lane_lost_count > self.MAX_LOST_COUNT:
+          # Track truly lost - find new one
+          candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
+          if candidate:
+            self.right_lane_track_id = candidate.trackId
+            self.right_lane_track_count = 1
+            self.right_lane_lost_count = 0
+            self.right_lane_lead = None
+          else:
+            self.right_lane_track_id = None
+            self.right_lane_track_count = 0
+            self.right_lane_lost_count = 0
+            self.right_lane_lead = None
+        # else: keep showing old lead for now (sticky tracking)
     else:
+      # No current track - find closest in right lane
       candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
       if candidate:
         self.right_lane_track_id = candidate.trackId
         self.right_lane_track_count = 1
+        self.right_lane_lost_count = 0
         self.right_lane_lead = None
       else:
         self.right_lane_lead = None
