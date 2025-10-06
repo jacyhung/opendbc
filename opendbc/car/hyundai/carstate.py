@@ -176,12 +176,10 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     # This filters out noise/glitches that appear for 1-2 frames
     
     # Left lane: Check if our current track is still valid
-    # NOTE: Due to radar cone geometry, yRel changes as vehicle moves forward
-    # So we search ALL filtered points, not just left_lane
+    # ONLY search within left_lane to prevent cross-contamination
     if self.left_lane_track_id is not None:
-      # Try to find the same track in ALL filtered points (not just left_lane)
-      all_points = left_lane + right_lane
-      same_track = next((pt for pt in all_points if pt.trackId == self.left_lane_track_id), None)
+      # Search ONLY in left_lane (not right_lane to prevent wrong-side tracking)
+      same_track = next((pt for pt in left_lane if pt.trackId == self.left_lane_track_id), None)
       if same_track:
         # Track found - reset lost count and continue
         self.left_lane_lost_count = 0
@@ -219,11 +217,10 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       else:
         self.left_lane_lead = None
     
-    # Right lane: Same logic with lost count to prevent thrashing
+    # Right lane: Same logic - ONLY search within right_lane
     if self.right_lane_track_id is not None:
-      # Search ALL points (track may move between left/right due to cone geometry)
-      all_points = left_lane + right_lane
-      same_track = next((pt for pt in all_points if pt.trackId == self.right_lane_track_id), None)
+      # Search ONLY in right_lane (not left_lane to prevent wrong-side tracking)
+      same_track = next((pt for pt in right_lane if pt.trackId == self.right_lane_track_id), None)
       if same_track:
         # Track found - reset lost count and continue
         self.right_lane_lost_count = 0
