@@ -76,6 +76,10 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.left_lane_lead_rear = None
     self.right_lane_lead_rear = None
     
+    # Track IDs for stability (stick with same vehicle)
+    self.left_lane_track_id = None
+    self.right_lane_track_id = None
+    
     # Lane thresholds for adjacent lane detection
     self.LANE_BOUNDARY = 1.8
     self.MAX_LATERAL = 5.5
@@ -112,28 +116,31 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       if not pt.measured:
         continue
       
-      # Filter out stationary objects (walls, barriers, signs)
-      # Strategy 1: If we're moving, filter stationary objects
-      if v_ego > 1.0:  # We're moving
-        # Filter out stationary objects (walls/barriers)
-        # Real vehicles will have vRel < -1.0 (approaching) or similar to our speed
-        if pt.vRel > -1.0:  # Nearly stationary - likely a wall/barrier
+      # AGGRESSIVE FILTERING to eliminate walls/floor/barriers
+      
+      # Filter 1: Velocity-based (when moving)
+      if v_ego > 2.0:  # Moving at decent speed
+        # Real vehicles: vRel should be negative (approaching) and significant
+        if pt.vRel > -2.0:  # Too slow/stationary - likely wall/barrier
+          continue
+      elif v_ego > 0.5:  # Slow speed
+        if pt.vRel > -0.5:  # Stationary when we're moving slowly
           continue
       
-      # Strategy 2: Even when stopped, filter out objects that are too far or too close
-      # Real adjacent lane vehicles should be roughly parallel to you (similar distance range)
-      # Filter out very close objects (< 3m) - likely your own car reflection or very close barriers
-      if pt.dRel < 3.0:
+      # Filter 2: Distance-based
+      if pt.dRel < 5.0:  # Too close - likely floor reflection or very close barrier
         continue
       
-      # Strategy 3: When stopped, only show vehicles very close to you (likely real cars)
-      # Ignore distant objects when parked - they're probably barriers
-      if v_ego < 0.5:  # Completely stopped
-        if pt.dRel > 15.0:  # Ignore objects >15m away when parked
+      # Filter 3: When stopped, be very conservative
+      if v_ego < 0.5:  # Stopped
+        if pt.dRel > 15.0:  # Ignore distant objects when parked
+          continue
+        # When stopped, ONLY accept if there's some relative motion (engine vibration, etc.)
+        # This helps filter static walls
+        if abs(pt.vRel) < 0.1 and abs(pt.yvRel) < 0.1:  # Completely static
           continue
       
-      # Strategy 4: Filter objects with extreme lateral positions (likely barriers/signs)
-      # Already handled by MAX_LATERAL, but add extra check for very far objects
+      # Filter 4: Lateral position sanity check
       if abs(pt.yRel) > self.MAX_LATERAL:
         continue
       
@@ -144,19 +151,39 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       elif self.LANE_BOUNDARY < pt.yRel < self.MAX_LATERAL:
         right_lane.append(pt)
     
-    # Split vehicles into FRONT (ahead) and REAR (blind spot/beside)
-    # REAR: vehicles within 0-10m (blind spot area, beside/slightly behind)
-    # FRONT: vehicles beyond 10m (ahead in adjacent lane)
-    left_rear = [pt for pt in left_lane if 0 <= pt.dRel <= self.REAR_DISTANCE_MAX]
-    left_front = [pt for pt in left_lane if pt.dRel > self.REAR_DISTANCE_MAX]
-    right_rear = [pt for pt in right_lane if 0 <= pt.dRel <= self.REAR_DISTANCE_MAX]
-    right_front = [pt for pt in right_lane if pt.dRel > self.REAR_DISTANCE_MAX]
+    # Track stability: Try to stick with the same vehicle instead of jumping around
+    # If we're already tracking a vehicle, prefer to keep tracking it unless it disappears
     
-    # Find closest in each category
-    self.left_lane_lead = min(left_front, key=lambda pt: pt.dRel) if left_front else None
-    self.left_lane_lead_rear = min(left_rear, key=lambda pt: pt.dRel) if left_rear else None
-    self.right_lane_lead = min(right_front, key=lambda pt: pt.dRel) if right_front else None
-    self.right_lane_lead_rear = min(right_rear, key=lambda pt: pt.dRel) if right_rear else None
+    # Left lane: Check if our current track is still valid
+    if self.left_lane_track_id is not None:
+      # Try to find the same track
+      same_track = next((pt for pt in left_lane if pt.trackId == self.left_lane_track_id), None)
+      if same_track:
+        self.left_lane_lead = same_track
+      else:
+        # Track lost, find new closest
+        self.left_lane_lead = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
+        self.left_lane_track_id = self.left_lane_lead.trackId if self.left_lane_lead else None
+    else:
+      # No current track, find closest
+      self.left_lane_lead = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
+      self.left_lane_track_id = self.left_lane_lead.trackId if self.left_lane_lead else None
+    
+    # Right lane: Same logic
+    if self.right_lane_track_id is not None:
+      same_track = next((pt for pt in right_lane if pt.trackId == self.right_lane_track_id), None)
+      if same_track:
+        self.right_lane_lead = same_track
+      else:
+        self.right_lane_lead = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
+        self.right_lane_track_id = self.right_lane_lead.trackId if self.right_lane_lead else None
+    else:
+      self.right_lane_lead = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
+      self.right_lane_track_id = self.right_lane_lead.trackId if self.right_lane_lead else None
+    
+    # REAR signals disabled for now
+    self.left_lane_lead_rear = None
+    self.right_lane_lead_rear = None
     
     # Minimal debug output (only when leads change)
     # Uncomment for debugging:

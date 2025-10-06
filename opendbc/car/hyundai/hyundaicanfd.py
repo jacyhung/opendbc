@@ -301,42 +301,15 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
       "LEAD_RIGHT_LATERAL": 0,
     })
   
-  # REAR signals - blind spot area (0-10m beside/behind vehicle)
-  # Distance appears to be INVERTED: smaller value = further back, larger value = closer to front
-  # Try inverting: 10m - actual_distance
-  if left_lane_lead_rear is not None:
-    # Invert the distance: closer vehicles get higher values
-    # If car is at 2m, send (10-2)*10 = 80
-    # If car is at 8m, send (10-8)*10 = 20
-    inverted_dist = max(0, 10.0 - left_lane_lead_rear.dRel)
-    left_rear_dist = max(1, min(int(inverted_dist * 10), 100))
-    msg_162.update({
-      "LEAD_LEFT_REAR_STATUS": 2,  # Same icon as front
-      "LEAD_LEFT_REAR_DISTANCE": left_rear_dist,
-      "LEAD_LEFT_REAR_LATERAL": 80,  # Fixed lateral position
-    })
-  else:
-    msg_162.update({
-      "LEAD_LEFT_REAR_STATUS": 0,
-      "LEAD_LEFT_REAR_DISTANCE": 0,
-      "LEAD_LEFT_REAR_LATERAL": 0,
-    })
-  
-  if right_lane_lead_rear is not None:
-    # Invert the distance: closer vehicles get higher values
-    inverted_dist = max(0, 10.0 - right_lane_lead_rear.dRel)
-    right_rear_dist = max(1, min(int(inverted_dist * 10), 100))
-    msg_162.update({
-      "LEAD_RIGHT_REAR_STATUS": 2,  # Same icon as front
-      "LEAD_RIGHT_REAR_DISTANCE": right_rear_dist,
-      "LEAD_RIGHT_REAR_LATERAL": 80,  # Fixed lateral position
-    })
-  else:
-    msg_162.update({
-      "LEAD_RIGHT_REAR_STATUS": 0,
-      "LEAD_RIGHT_REAR_DISTANCE": 0,
-      "LEAD_RIGHT_REAR_LATERAL": 0,
-    })
+  # REAR signals - disabled (direction logic unclear)
+  msg_162.update({
+    "LEAD_LEFT_REAR_STATUS": 0,
+    "LEAD_LEFT_REAR_DISTANCE": 0,
+    "LEAD_LEFT_REAR_LATERAL": 0,
+    "LEAD_RIGHT_REAR_STATUS": 0,
+    "LEAD_RIGHT_REAR_DISTANCE": 0,
+    "LEAD_RIGHT_REAR_LATERAL": 0,
+  })
 
   return [packer.make_can_msg(msg, CAN.ECAN, data) for msg, data in [("CCNC_0x161", msg_161), ("CCNC_0x162", msg_162)]]
 
