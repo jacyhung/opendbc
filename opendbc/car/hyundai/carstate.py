@@ -76,9 +76,12 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.left_lane_lead_rear = None
     self.right_lane_lead_rear = None
     
-    # Track IDs for stability (stick with same vehicle)
+    # Track IDs and counts for stability (stick with same vehicle)
     self.left_lane_track_id = None
     self.right_lane_track_id = None
+    self.left_lane_track_count = 0  # How many frames we've seen this track
+    self.right_lane_track_count = 0
+    self.MIN_TRACK_COUNT = 5  # Minimum frames before we trust a track (filters noise)
     
     # Lane thresholds for adjacent lane detection
     self.LANE_BOUNDARY = 1.8
@@ -151,35 +154,70 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       elif self.LANE_BOUNDARY < pt.yRel < self.MAX_LATERAL:
         right_lane.append(pt)
     
-    # Track stability: Try to stick with the same vehicle instead of jumping around
-    # If we're already tracking a vehicle, prefer to keep tracking it unless it disappears
+    # Track stability with count-based filtering (like radard)
+    # Only show tracks that have been stable for MIN_TRACK_COUNT frames
+    # This filters out noise/glitches that appear for 1-2 frames
     
     # Left lane: Check if our current track is still valid
     if self.left_lane_track_id is not None:
       # Try to find the same track
       same_track = next((pt for pt in left_lane if pt.trackId == self.left_lane_track_id), None)
       if same_track:
-        self.left_lane_lead = same_track
+        # Same track still exists, increment count
+        self.left_lane_track_count += 1
+        # Only show if we've seen it enough times (filters noise)
+        if self.left_lane_track_count >= self.MIN_TRACK_COUNT:
+          self.left_lane_lead = same_track
+        else:
+          self.left_lane_lead = None  # Not confident yet
       else:
-        # Track lost, find new closest
-        self.left_lane_lead = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
-        self.left_lane_track_id = self.left_lane_lead.trackId if self.left_lane_lead else None
+        # Track lost, reset and find new closest
+        candidate = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
+        if candidate:
+          self.left_lane_track_id = candidate.trackId
+          self.left_lane_track_count = 1  # Start counting
+          self.left_lane_lead = None  # Don't show until MIN_TRACK_COUNT
+        else:
+          self.left_lane_track_id = None
+          self.left_lane_track_count = 0
+          self.left_lane_lead = None
     else:
-      # No current track, find closest
-      self.left_lane_lead = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
-      self.left_lane_track_id = self.left_lane_lead.trackId if self.left_lane_lead else None
+      # No current track, find closest and start counting
+      candidate = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
+      if candidate:
+        self.left_lane_track_id = candidate.trackId
+        self.left_lane_track_count = 1
+        self.left_lane_lead = None  # Don't show until MIN_TRACK_COUNT
+      else:
+        self.left_lane_lead = None
     
     # Right lane: Same logic
     if self.right_lane_track_id is not None:
       same_track = next((pt for pt in right_lane if pt.trackId == self.right_lane_track_id), None)
       if same_track:
-        self.right_lane_lead = same_track
+        self.right_lane_track_count += 1
+        if self.right_lane_track_count >= self.MIN_TRACK_COUNT:
+          self.right_lane_lead = same_track
+        else:
+          self.right_lane_lead = None
       else:
-        self.right_lane_lead = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
-        self.right_lane_track_id = self.right_lane_lead.trackId if self.right_lane_lead else None
+        candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
+        if candidate:
+          self.right_lane_track_id = candidate.trackId
+          self.right_lane_track_count = 1
+          self.right_lane_lead = None
+        else:
+          self.right_lane_track_id = None
+          self.right_lane_track_count = 0
+          self.right_lane_lead = None
     else:
-      self.right_lane_lead = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
-      self.right_lane_track_id = self.right_lane_lead.trackId if self.right_lane_lead else None
+      candidate = min(right_lane, key=lambda pt: pt.dRel) if right_lane else None
+      if candidate:
+        self.right_lane_track_id = candidate.trackId
+        self.right_lane_track_count = 1
+        self.right_lane_lead = None
+      else:
+        self.right_lane_lead = None
     
     # REAR signals disabled for now
     self.left_lane_lead_rear = None
