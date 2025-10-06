@@ -136,8 +136,12 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         if pt.vRel > 0.0:  # Completely stationary
           continue
       else:  # Stopped (v_ego < 0.5)
-        # When stopped, don't show anything - too much noise
-        continue
+        # When stopped, only show vehicles that are MOVING (passing you)
+        # Moving vehicles will have significant vRel (either approaching or moving away)
+        if abs(pt.vRel) < 2.0:  # Not moving fast enough - likely stationary noise
+          continue
+        # Debug: Print what we're considering
+        print(f"[CS STOPPED] Candidate: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s, trackId={pt.trackId}")
       
       # Left lane: tracks beyond left boundary but not too far
       if -self.MAX_LATERAL < pt.yRel < -self.LANE_BOUNDARY:
