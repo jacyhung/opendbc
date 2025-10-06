@@ -85,7 +85,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     
     # Lane thresholds for adjacent lane detection
     self.LANE_BOUNDARY = 1.5  # Reduced from 1.8 to catch vehicles closer to lane line
-    self.MAX_LATERAL = 5.5
+    self.MAX_LATERAL = 7.0  # Increased from 5.5 to catch vehicles further out
     # REAR signals are for blind spot area: vehicles beside/behind you (negative dRel or very close)
     self.REAR_DISTANCE_MAX = 10.0  # meters - max distance for REAR signals (1-10m range)
     self.MIN_RELATIVE_VELOCITY = -30.0  # m/s - minimum relative velocity to consider (filters stationary objects)
@@ -140,9 +140,9 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         if pt.vRel > 0.0:  # Completely stationary
           continue
       else:  # Stopped (v_ego < 0.5)
-        # When stopped, only show vehicles that are MOVING (passing you)
-        # Moving vehicles will have significant vRel (either approaching or moving away)
-        if abs(pt.vRel) < 2.0:  # Not moving fast enough - likely stationary noise
+        # When stopped, only show vehicles that are MOVING AWAY (passing you)
+        # Negative vRel = moving away, Positive vRel = approaching (don't show)
+        if pt.vRel > -2.0:  # Not moving away fast enough, or approaching
           continue
         # Debug: Print what passed velocity filter
         print(f"[CS PASS] Candidate: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s, trackId={pt.trackId}")
@@ -163,9 +163,12 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     # This filters out noise/glitches that appear for 1-2 frames
     
     # Left lane: Check if our current track is still valid
+    # NOTE: Due to radar cone geometry, yRel changes as vehicle moves forward
+    # So we search ALL filtered points, not just left_lane
     if self.left_lane_track_id is not None:
-      # Try to find the same track
-      same_track = next((pt for pt in left_lane if pt.trackId == self.left_lane_track_id), None)
+      # Try to find the same track in ALL filtered points (not just left_lane)
+      all_points = left_lane + right_lane
+      same_track = next((pt for pt in all_points if pt.trackId == self.left_lane_track_id), None)
       if same_track:
         # Same track still exists, increment count
         self.left_lane_track_count += 1
@@ -175,7 +178,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         else:
           self.left_lane_lead = None  # Not confident yet
       else:
-        # Track lost, reset and find new closest
+        # Track lost, reset and find new closest in left lane
         candidate = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
         if candidate:
           self.left_lane_track_id = candidate.trackId
@@ -186,7 +189,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
           self.left_lane_track_count = 0
           self.left_lane_lead = None
     else:
-      # No current track, find closest and start counting
+      # No current track, find closest in left lane and start counting
       candidate = min(left_lane, key=lambda pt: pt.dRel) if left_lane else None
       if candidate:
         self.left_lane_track_id = candidate.trackId
@@ -195,9 +198,10 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       else:
         self.left_lane_lead = None
     
-    # Right lane: Same logic
+    # Right lane: Same logic - search all points due to cone geometry
     if self.right_lane_track_id is not None:
-      same_track = next((pt for pt in right_lane if pt.trackId == self.right_lane_track_id), None)
+      all_points = left_lane + right_lane
+      same_track = next((pt for pt in all_points if pt.trackId == self.right_lane_track_id), None)
       if same_track:
         self.right_lane_track_count += 1
         if self.right_lane_track_count >= self.MIN_TRACK_COUNT:
