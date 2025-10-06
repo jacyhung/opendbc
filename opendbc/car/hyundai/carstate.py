@@ -81,11 +81,11 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.right_lane_track_id = None
     self.left_lane_track_count = 0  # How many frames we've seen this track
     self.right_lane_track_count = 0
-    self.MIN_TRACK_COUNT = 10  # Minimum frames before we trust a track (1.0s at 10Hz) - increased to filter noise
+    self.MIN_TRACK_COUNT = 15  # Require 1.5 seconds of stability - noise won't last this long
     
     # Lane thresholds for adjacent lane detection
-    self.LANE_BOUNDARY = 1.5  # Reduced from 1.8 to catch vehicles closer to lane line
-    self.MAX_LATERAL = 7.0  # Increased from 5.5 to catch vehicles further out
+    self.LANE_BOUNDARY = 1.5  # Minimum lateral distance to be considered adjacent lane
+    self.MAX_LATERAL = 10.0  # Maximum lateral distance (generous for radar cone)
     # REAR signals are for blind spot area: vehicles beside/behind you (negative dRel or very close)
     self.REAR_DISTANCE_MAX = 10.0  # meters - max distance for REAR signals (1-10m range)
     self.MIN_RELATIVE_VELOCITY = -30.0  # m/s - minimum relative velocity to consider (filters stationary objects)
@@ -119,33 +119,32 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       if not pt.measured:
         continue
       
-      # Debug: Print ALL points in adjacent lanes when stopped
-      if v_ego < 0.5 and (abs(pt.yRel) > self.LANE_BOUNDARY):
-        print(f"[CS ALL] {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s, trackId={pt.trackId}")
+      # ============ SIMPLE, CLEAR FILTERING ============
       
-      # Simple filtering like openpilot's lead detection
-      
-      # Filter 1: Distance sanity check
-      # Radar points closer than 0.75m are almost always glitches (from radard.py)
-      if pt.dRel < 0.75:
+      # Filter 1: Basic sanity - remove obvious glitches
+      if pt.dRel < 0.75 or pt.dRel > 200.0:
         continue
       
-      # Filter 2: Velocity-based filtering
-      if v_ego > 2.0:  # Moving at decent speed
-        # Filter out stationary objects (vRel ≈ 0 when we're moving)
-        if pt.vRel > -1.0:  # Nearly stationary - likely wall/barrier
+      # Filter 2: Must be in adjacent lane area
+      if abs(pt.yRel) < self.LANE_BOUNDARY or abs(pt.yRel) > self.MAX_LATERAL:
+        continue
+      
+      # Filter 3: Velocity-based (only when moving or stopped)
+      if v_ego > 1.0:  # We're moving
+        # Real vehicles will have vRel significantly different from 0
+        # Walls/barriers will have vRel ≈ 0
+        if abs(pt.vRel) < 1.0:  # Stationary - wall/barrier
           continue
-      elif v_ego > 0.5:  # Slow speed
-        # Be less strict at slow speeds
-        if pt.vRel > 0.0:  # Completely stationary
+      else:  # We're stopped (v_ego < 1.0)
+        # When stopped, EVERYTHING has stable trackIds (walls, signs, parked cars)
+        # The ONLY way to identify real passing cars is by velocity
+        # Real cars passing = at least 25 km/h = 7 m/s
+        if pt.vRel > -7.0:  # Not moving away fast enough (< 25 km/h)
           continue
-      else:  # Stopped (v_ego < 0.5)
-        # When stopped, only show vehicles that are MOVING AWAY (passing you)
-        # Negative vRel = moving away, Positive vRel = approaching (don't show)
-        if pt.vRel > -2.0:  # Not moving away fast enough, or approaching
-          continue
-        # Debug: Print what passed velocity filter
-        print(f"[CS PASS] Candidate: {pt.dRel:.1f}m @ {pt.yRel:+.2f}m, vRel={pt.vRel:.1f}m/s, trackId={pt.trackId}")
+        # This filters:
+        # - Stationary objects (vRel = 0)
+        # - Approaching vehicles (vRel > 0) 
+        # - Slow moving noise (abs(vRel) < 7.0)
       
       # Left lane: tracks beyond left boundary but not too far
       if -self.MAX_LATERAL < pt.yRel < -self.LANE_BOUNDARY:
