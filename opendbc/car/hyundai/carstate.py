@@ -81,7 +81,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     self.right_lane_track_id = None
     self.left_lane_track_count = 0  # How many frames we've seen this track
     self.right_lane_track_count = 0
-    self.MIN_TRACK_COUNT = 5  # Minimum frames before we trust a track (filters noise)
+    self.MIN_TRACK_COUNT = 10  # Minimum frames before we trust a track (filters noise) - increased from 5
     
     # Lane thresholds for adjacent lane detection
     self.LANE_BOUNDARY = 1.8
@@ -119,32 +119,42 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       if not pt.measured:
         continue
       
-      # AGGRESSIVE FILTERING to eliminate walls/floor/barriers
+      # ULTRA AGGRESSIVE FILTERING - only accept clear, stable vehicle tracks
       
-      # Filter 1: Velocity-based (when moving)
-      if v_ego > 2.0:  # Moving at decent speed
-        # Real vehicles: vRel should be negative (approaching) and significant
-        if pt.vRel > -2.0:  # Too slow/stationary - likely wall/barrier
-          continue
-      elif v_ego > 0.5:  # Slow speed
-        if pt.vRel > -0.5:  # Stationary when we're moving slowly
-          continue
-      
-      # Filter 2: Distance-based
-      if pt.dRel < 5.0:  # Too close - likely floor reflection or very close barrier
+      # Filter 1: Distance range - real adjacent vehicles are in a specific range
+      if pt.dRel < 1.0:  # Too close - likely floor reflection or own car
+        continue
+      if pt.dRel > 80.0:  # Too far - likely distant barriers
         continue
       
-      # Filter 3: When stopped, be very conservative
-      if v_ego < 0.5:  # Stopped
-        if pt.dRel > 15.0:  # Ignore distant objects when parked
+      # Filter 2: Velocity-based (STRICT)
+      if v_ego > 3.0:  # Moving at speed
+        # Real vehicles: vRel should be strongly negative (approaching)
+        if pt.vRel > -3.0:  # Not approaching fast enough - likely stationary object
           continue
-        # When stopped, ONLY accept if there's some relative motion (engine vibration, etc.)
-        # This helps filter static walls
-        if abs(pt.vRel) < 0.1 and abs(pt.yvRel) < 0.1:  # Completely static
+      elif v_ego > 1.0:  # Slow speed
+        if pt.vRel > -1.5:  # Stationary when we're moving
           continue
+      else:  # Stopped or very slow
+        # When stopped, DON'T show anything - too much noise
+        continue
       
-      # Filter 4: Lateral position sanity check
-      if abs(pt.yRel) > self.MAX_LATERAL:
+      # Filter 3: Lateral position - must be clearly in adjacent lane
+      if abs(pt.yRel) < self.LANE_BOUNDARY + 0.5:  # Too close to center - might be in our lane
+        continue
+      if abs(pt.yRel) > self.MAX_LATERAL - 0.5:  # Too far - likely barrier
+        continue
+      
+      # Filter 4: Check if this point is ISOLATED (real cars are single points, not clusters)
+      # Count how many other points are near this one
+      nearby_count = sum(1 for other in live_tracks.points 
+                        if other.trackId != pt.trackId 
+                        and abs(other.dRel - pt.dRel) < 5.0  # Within 5m distance
+                        and abs(other.yRel - pt.yRel) < 1.0)  # Within 1m lateral
+      
+      # If there are many nearby points, it's likely a cluster of noise (wall/parked cars)
+      # Real vehicles appear as a single, isolated point
+      if nearby_count > 2:  # More than 2 nearby points = noise cluster
         continue
       
       # Left lane: tracks beyond left boundary but not too far
