@@ -149,12 +149,11 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
 
   msg_161.update({
     "DAW_ICON": 0,
-    "LKA_ICON": 0,
+    "LKA_ICON": 4 if enabled else 4 if msg_1b5.get("Info_LftLnQualSta", 0) > 0 else 4 if msg_1b5.get("Info_RtLnQualSta", 0) > 0 else 3,
     "LFA_ICON": 2 if enabled else 0,
     "CENTERLINE": 1 if enabled else 0,
-    "LANELINE_CURVATURE": curvature.get(max(-15, min(int(out.steeringAngleDeg / 4.5), 15)), 14) if enabled and not anyBlinker else 15,
-    "LANELINE_LEFT": (0 if not enabled else 1 if not hud.leftLaneVisible else 4 if hud.leftLaneDepart else 6 if anyBlinker else 2),
-    "LANELINE_RIGHT": (0 if not enabled else 1 if not hud.rightLaneVisible else 4 if hud.rightLaneDepart else 6 if anyBlinker else 2),
+    "LANELINE_LEFT": (0 if msg_1b5.get("Info_LftLnQualSta", 0) < 1 else 4 if hud.leftLaneDepart else 6 if leftBlinker or rightBlinker else 2),
+    "LANELINE_RIGHT": (0 if msg_1b5.get("Info_RtLnQualSta", 0) < 1 else 4 if hud.rightLaneDepart else 6 if leftBlinker or rightBlinker else 2),
     "LCA_LEFT_ICON": (0 if not enabled or out.vEgo < LANE_CHANGE_SPEED_MIN else 1 if out.leftBlindspot else 2 if anyBlinker else 4),
     "LCA_RIGHT_ICON": (0 if not enabled or out.vEgo < LANE_CHANGE_SPEED_MIN else 1 if out.rightBlindspot else 2 if anyBlinker else 4),
     "LCA_LEFT_ARROW": 2 if leftBlinker else 0,
@@ -194,6 +193,51 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
 
     msg_161["LANELINE_LEFT_POSITION"] = leftlane
     msg_161["LANELINE_RIGHT_POSITION"] = rightlane
+
+# LANE CURVATURE
+  leftlanequal = msg_1b5["Info_LftLnQualSta"]
+  rightlanequal = msg_1b5["Info_RtLnQualSta"]
+  leftlanecurvature = msg_1b5["Info_LftLnCvtrVal"]
+  rightlanecurvature = msg_1b5["Info_RtLnCvtrVal"]
+
+  if leftlanequal not in (2, 3):
+    leftlanecurvature = 0
+  if rightlanequal not in (2, 3):
+    rightlanecurvature = 0
+
+  if leftlanecurvature == rightlanecurvature == 0:
+    curvature = 0
+  elif leftlanecurvature == 0:
+    curvature = rightlanecurvature
+  elif rightlanecurvature == 0:
+    curvature = leftlanecurvature
+  else:
+    curvature = (leftlanecurvature + rightlanecurvature) / 2
+
+  curvature = -curvature * 6
+  clipped_curvature = max(0, min(0.032767, abs(curvature)))
+  scaled_curvature = round((clipped_curvature / 0.032767) * 15)
+  value = max(0, min(scaled_curvature, 15) + (-1 if curvature < 0 else 0))
+
+  msg_161["LANELINE_CURVATURE"] = value
+  msg_161["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 else 0
+
+  # LEAD
+  if not enabled:
+    base_distance = msg_1b5.get("Longitudinal_Distance", 2000)
+
+    if msg_1b5.get("ID_CIPV", 0) > 0:
+        lead_status = 2
+        distance = max(0, min(base_distance, 2000))
+    else:
+        # No lead detected
+        lead_status = 0
+        distance = 2000
+
+    msg_162.update({
+        "LEAD": lead_status,
+        "LEAD_DISTANCE": distance
+    })
 
   if hud.leftLaneDepart or hud.rightLaneDepart:
     msg_162["VIBRATE"] = 1
