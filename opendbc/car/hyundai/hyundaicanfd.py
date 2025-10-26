@@ -145,8 +145,7 @@ def create_ccnc(packer, CAN, openpilotLongitudinalControl, enabled, hud, leftBli
 
   LANE_CHANGE_SPEED_MIN = 8.9408
   anyBlinker = leftBlinker or rightBlinker
-  curvature = {i: (31 if i == -1 else 13 - abs(i + 15)) if i < 0 else 15 + i for i in range(-15, 16)}
-
+  
   msg_161.update({
     "DAW_ICON": 0,
     "LKA_ICON": 4 if enabled else 4 if msg_1b5.get("Info_LftLnQualSta", 0) > 0 else 4 if msg_1b5.get("Info_RtLnQualSta", 0) > 0 else 3,
